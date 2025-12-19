@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
   FileCode, Image as ImageIcon, ShieldAlert, Stamp, Smile, 
-  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2
+  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2, Save, Eye, EyeOff
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
 import UpscaleTool from './UpscaleTool';
@@ -19,24 +19,34 @@ import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
 
 const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const [hasKey, setHasKey] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      // @ts-ignore
-      window.aistudio.hasSelectedApiKey().then(setHasKey);
+      const savedKey = localStorage.getItem('GEMINI_API_KEY') || '';
+      setApiKey(savedKey);
+      setIsSaved(!!savedKey);
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const handleSelectKey = async () => {
-    // @ts-ignore
-    await window.aistudio.openSelectKey();
-    // 选择完成后刷新状态
-    // @ts-ignore
-    setHasKey(await window.aistudio.hasSelectedApiKey());
+  const handleSave = () => {
+    localStorage.setItem('GEMINI_API_KEY', apiKey);
+    setIsSaved(!!apiKey);
+    // Visual feedback
+    const btn = document.getElementById('save-btn');
+    if (btn) {
+      btn.innerText = '已保存！';
+      setTimeout(() => {
+        if (document.getElementById('save-btn')) {
+          btn.innerText = '保存配置';
+        }
+      }, 2000);
+    }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -61,39 +71,61 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               <span>Google Gemini API 配置</span>
             </label>
             
-            <div className={`p-6 rounded-3xl border-2 transition-all ${hasKey ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
+            <div className={`p-6 rounded-3xl border-2 transition-all ${isSaved ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${hasKey ? 'bg-emerald-500' : 'bg-pink-400'} animate-pulse`}></div>
-                  <span className={`text-xs font-black uppercase ${hasKey ? 'text-emerald-600' : 'text-pink-600'}`}>
-                    {hasKey ? 'API Key 已就绪' : '等待配置 API Key'}
+                  <div className={`w-2 h-2 rounded-full ${isSaved ? 'bg-emerald-500' : 'bg-pink-400'} ${isSaved ? '' : 'animate-pulse'}`}></div>
+                  <span className={`text-xs font-black uppercase ${isSaved ? 'text-emerald-600' : 'text-pink-600'}`}>
+                    {isSaved ? 'API Key 已设置' : '请输入 API Key'}
                   </span>
                 </div>
-                {hasKey && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                {isSaved && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
               </div>
+
+              <div className="relative mb-4">
+                <input 
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setIsSaved(false);
+                  }}
+                  placeholder="在此输入您的 Gemini API Key"
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-mono focus:ring-2 focus:ring-pink-500 outline-none transition-all pr-12"
+                />
+                <button 
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-pink-500 transition-colors"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
               <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-5">
-                此应用为单机工具，您的 API Key 仅在浏览器本地使用，用于调用 AI 提升画质及去除背景功能。
+                此应用为演示 Demo，API Key 仅保存在您的浏览器本地 (LocalStorage)，用于调用 AI 提升画质及去除背景功能。
               </p>
+              
               <button 
-                onClick={handleSelectKey}
-                className="w-full py-3 bg-white border border-slate-200 hover:border-pink-500 hover:text-pink-500 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
+                id="save-btn"
+                onClick={handleSave}
+                className="w-full py-3 bg-slate-800 text-white hover:bg-slate-700 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
               >
-                <Settings className="w-4 h-4" />
-                <span>{hasKey ? '更换/更新 API Key' : '立即输入 API Key'}</span>
+                <Save className="w-4 h-4" />
+                <span>保存配置</span>
               </button>
             </div>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
             <a 
-              href="https://ai.google.dev/gemini-api/docs/billing" 
+              href="https://aistudio.google.com/app/apikey" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
             >
               <span className="flex items-center space-x-1.5">
                 <Info className="w-3 h-3" />
-                <span>如何获取免费/付费 API Key？</span>
+                <span>如何获取免费 API Key？(Google AI Studio)</span>
               </span>
               <ExternalLink className="w-3 h-3" />
             </a>
@@ -103,9 +135,9 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
         <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
           <button 
             onClick={onClose}
-            className="px-8 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-black hover:bg-slate-700 transition-all active:scale-95 shadow-lg shadow-slate-200"
+            className="px-8 py-2.5 bg-pink-500 text-white rounded-xl text-sm font-black hover:bg-pink-600 transition-all active:scale-95 shadow-lg shadow-pink-200"
           >
-            保存并返回
+            完成
           </button>
         </div>
       </div>
@@ -232,7 +264,7 @@ const App: React.FC = () => {
             <Heart className="w-5 h-5 text-pink-500 fill-current" />
             <span className="text-lg font-black text-slate-800 tracking-tight">PINK<span className="text-pink-500">IMG</span></span>
           </div>
-          <div className="text-sm text-slate-400">@ {new Date().getFullYear()} PinkImg. 为你的创意而生.</div>
+          <div className="text-sm text-slate-400">© {new Date().getFullYear()} PinkImg. 为你的创意而生.</div>
         </div>
       </footer>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

@@ -13,19 +13,14 @@ const RemoveBgTool: React.FC = () => {
   };
 
   const processImages = async () => {
-    // Fix: Using @ts-ignore for window.aistudio methods provided by the platform
-    // @ts-ignore
-    const hasKey = await window.aistudio.hasSelectedApiKey();
-    if (!hasKey) {
-      alert("请先点击右上角设置图标配置 Gemini API Key");
-      // @ts-ignore
-      await window.aistudio.openSelectKey();
+    const apiKey = localStorage.getItem('GEMINI_API_KEY');
+    if (!apiKey) {
+      alert("请点击右上角设置图标手动输入您的 Gemini API Key");
       return;
     }
 
     setIsProcessing(true);
-    // Use fresh instance for injected API Key
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
 
     for (const img of images) {
       if (img.status === 'done') continue;
@@ -60,11 +55,8 @@ const RemoveBgTool: React.FC = () => {
           throw new Error("No image data returned");
         }
       } catch (err) {
-        setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: 'AI处理失败' } : i));
-        if ((err as any).message?.includes("Requested entity was not found")) {
-           // @ts-ignore
-           await window.aistudio.openSelectKey();
-        }
+        console.error(err);
+        setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: 'AI处理失败: ' + (err as Error).message } : i));
       }
     }
     setIsProcessing(false);
@@ -73,7 +65,7 @@ const RemoveBgTool: React.FC = () => {
   return (
     <ToolPageLayout
       title="去除背景"
-      description="利用 AI 智能识别主体，一键移除复杂背景。此功能需要配置 API Key。"
+      description="利用 AI 智能识别主体，一键移除复杂背景。此功能需要您在设置中手动输入 API Key。"
       isAi={true}
       images={images}
       onAddFiles={addFiles}
@@ -84,7 +76,7 @@ const RemoveBgTool: React.FC = () => {
     >
       <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
         <p className="text-[11px] font-bold text-emerald-700 leading-relaxed">
-          AI 将自动识别图像中的主体并精准移除背景。请确保在设置中配置了有效的 API Key。
+          AI 将自动识别图像中的主体并精准移除背景。请确保在设置中手动填写了有效的 API Key。
         </p>
       </div>
     </ToolPageLayout>
