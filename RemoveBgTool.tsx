@@ -2,11 +2,9 @@
 import React, { useState } from 'react';
 import ToolPageLayout from './ToolPageLayout';
 import { GoogleGenAI } from "@google/genai";
-import { Eye } from 'lucide-react';
 
-const UpscaleTool: React.FC = () => {
+const RemoveBgTool: React.FC = () => {
   const [images, setImages] = useState<any[]>([]);
-  const [scaleFactor, setScaleFactor] = useState('2x');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const addFiles = (files: File[]) => {
@@ -34,7 +32,7 @@ const UpscaleTool: React.FC = () => {
           contents: {
             parts: [
               { inlineData: { data: base64, mimeType: img.file.type } },
-              { text: `Enhance this image to ${scaleFactor} resolution. Return only high quality image.` }
+              { text: "Remove the background from this image. Output only the subject with a transparent background in high quality PNG format." }
             ]
           }
         });
@@ -43,6 +41,10 @@ const UpscaleTool: React.FC = () => {
         if (resultPart?.inlineData) {
           const res = `data:${resultPart.inlineData.mimeType};base64,${resultPart.inlineData.data}`;
           setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'done', result: res } : i));
+          const link = document.createElement('a');
+          link.href = res;
+          link.download = `no-bg_${img.file.name.split('.')[0]}.png`;
+          link.click();
         }
       } catch (err) {
         setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: 'AI处理失败' } : i));
@@ -53,28 +55,23 @@ const UpscaleTool: React.FC = () => {
 
   return (
     <ToolPageLayout
-      title="提升图片质量"
-      description="批量利用 AI 放大并修复图片细节。"
+      title="去除背景"
+      description="利用 AI 智能识别主体，一键移除复杂背景。"
       isAi={true}
       images={images}
       onAddFiles={addFiles}
       onRemoveFile={(id) => setImages(prev => prev.filter(i => i.id !== id))}
       onProcess={processImages}
       isProcessing={isProcessing}
-      actionText="开始提升"
+      actionText="移除背景"
     >
-      <div className="space-y-4">
-        <label className="text-xs font-black text-slate-400 uppercase tracking-wider block">放大倍率</label>
-        <div className="flex bg-slate-50 p-1 rounded-xl">
-          {['2x', '4x'].map(f => (
-            <button key={f} onClick={() => setScaleFactor(f)} className={`flex-1 py-2 rounded-lg text-sm font-black transition-all ${scaleFactor === f ? 'bg-white shadow text-pink-500' : 'text-slate-400 hover:text-slate-600'}`}>
-              {f}
-            </button>
-          ))}
-        </div>
+      <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+        <p className="text-[11px] font-bold text-emerald-700 leading-relaxed">
+          AI 将自动识别图像中的主体并精准移除背景。处理时间取决于图像复杂程度。
+        </p>
       </div>
     </ToolPageLayout>
   );
 };
 
-export default UpscaleTool;
+export default RemoveBgTool;
