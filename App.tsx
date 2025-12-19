@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
   FileCode, Image as ImageIcon, ShieldAlert, Stamp, Smile, 
-  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2, Save, Eye, EyeOff
+  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2, Save, Eye, EyeOff, Github
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
 import UpscaleTool from './UpscaleTool';
@@ -35,7 +35,6 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   const handleSave = () => {
     localStorage.setItem('GEMINI_API_KEY', apiKey);
     setIsSaved(!!apiKey);
-    // Visual feedback
     const btn = document.getElementById('save-btn');
     if (btn) {
       btn.innerText = '已保存！';
@@ -117,7 +116,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             </div>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
             <a 
               href="https://aistudio.google.com/app/apikey" 
               target="_blank" 
@@ -127,6 +126,18 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               <span className="flex items-center space-x-1.5">
                 <Info className="w-3 h-3" />
                 <span>如何获取免费 API Key？(Google AI Studio)</span>
+              </span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <a 
+              href="https://github.com/zyb0408/PinkImg.git" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
+            >
+              <span className="flex items-center space-x-1.5">
+                <Github className="w-3 h-3" />
+                <span>项目开源地址 (GitHub)</span>
               </span>
               <ExternalLink className="w-3 h-3" />
             </a>
@@ -266,7 +277,15 @@ const App: React.FC = () => {
             <Heart className="w-5 h-5 text-pink-500 fill-current" />
             <span className="text-lg font-black text-slate-800 tracking-tight">PINK<span className="text-pink-500">IMG</span></span>
           </div>
-          <div className="text-sm text-slate-400">© {new Date().getFullYear()} PinkImg. 为你的创意而生.</div>
+          <div className="flex flex-col md:items-end space-y-1">
+            <div className="text-sm text-slate-500 font-bold">作者：抖音 沪上码仔AI</div>
+            <div className="text-[11px] text-slate-400 flex items-center space-x-3">
+               <span>© {new Date().getFullYear()} PinkImg. 为你的创意而生.</span>
+               <a href="https://github.com/zyb0408/PinkImg.git" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-pink-500 transition-colors">
+                 <Github className="w-4 h-4" />
+               </a>
+            </div>
+          </div>
         </div>
       </footer>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
