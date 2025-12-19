@@ -17,6 +17,7 @@ import WatermarkTool from './WatermarkTool';
 import FilterTool from './FilterTool';
 import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
+import BlurTool from './BlurTool';
 
 const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const [apiKey, setApiKey] = useState('');
@@ -102,7 +103,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               </div>
 
               <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-5">
-                此应用为演示 Demo，API Key 仅保存在您的浏览器本地 (LocalStorage)，用于调用 AI 提升画质及去除背景功能。
+                API Key 仅保存在您的浏览器本地 (LocalStorage)，用于调用 AI 提升画质及去除背景功能。
               </p>
               
               <button 
@@ -217,6 +218,7 @@ const App: React.FC = () => {
       case 'filter': return <FilterTool />;
       case 'html-to-img': return <HtmlToImgTool />;
       case 'exif': return <ExifTool />;
+      case 'blur-face': return <BlurTool />;
       default: return (
         <main className="flex-grow container mx-auto px-4 py-12 md:py-20">
           <div className="text-center max-w-4xl mx-auto mb-16">
