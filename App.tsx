@@ -12,6 +12,7 @@ import ResizeTool from './ResizeTool';
 import CropTool from './CropTool';
 import ConvertTool from './ConvertTool';
 import RemoveBgTool from './RemoveBgTool';
+import RotateTool from './RotateTool';
 
 const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
   <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-pink-100 px-4 py-3">
@@ -54,10 +55,10 @@ const App: React.FC = () => {
     { id: 'upscale', title: '提升图片质量', description: '以 AI 高分辨率放大图像，保持视觉质量。', isNew: true, icon: <Sparkles className="w-7 h-7 text-lime-600" />, category: ['全部', '优化'], color: 'bg-lime-50' },
     { id: 'convert', title: '转换至图片格式', description: '批量转换图片格式至 JPG, PNG 或 WEBP。', icon: <ArrowRightLeft className="w-7 h-7 text-yellow-600" />, category: ['全部', '转换'], color: 'bg-yellow-50' },
     { id: 'remove-bg', title: '去除背景', description: '利用 AI 快速删除图像的背景，并保持高质量。', isNew: true, icon: <ImageIcon className="w-7 h-7 text-emerald-600" />, category: ['全部', '编辑'], color: 'bg-emerald-50' },
+    { id: 'rotate', title: '旋转一个图片', description: '同时旋转多个 JPG, PNG 或 GIF 图片。', icon: <RotateCcw className="w-7 h-7 text-cyan-600" />, category: ['全部', '编辑'], color: 'bg-cyan-50' },
     { id: 'photo-editor', title: '照片编辑器', description: '利用文字、效果、镜框或贴纸让图片更生动。', icon: <Type className="w-7 h-7 text-purple-600" />, category: ['全部', '编辑'], color: 'bg-purple-50' },
     { id: 'watermark', title: '给图片加水印', description: '快速给你的图片加上图像或文本水印。', icon: <Stamp className="w-7 h-7 text-indigo-600" />, category: ['全部', '编辑', '安全'], color: 'bg-indigo-50' },
     { id: 'meme', title: '搞笑图片生成器', description: '在线制作搞笑创意图片，选择流行的模板。', icon: <Smile className="w-7 h-7 text-rose-600" />, category: ['全部', '创建'], color: 'bg-rose-50' },
-    { id: 'rotate', title: '旋转一个图片', description: '同时旋转多个 JPG, PNG 或 GIF 图片。', icon: <RotateCcw className="w-7 h-7 text-cyan-600" />, category: ['全部', '编辑'], color: 'bg-cyan-50' },
     { id: 'html-to-img', title: 'HTML转图片', description: '将网页转换为JPG或SVG，复制链接即可。', icon: <FileCode className="w-7 h-7 text-orange-600" />, category: ['全部', '创建'], color: 'bg-orange-50' },
     { id: 'blur-face', title: '模糊面部', description: '简便地模糊照片中的人脸或隐私物体。', isNew: true, icon: <ShieldAlert className="w-7 h-7 text-slate-600" />, category: ['全部', '编辑', '安全'], color: 'bg-slate-50' }
   ];
@@ -75,6 +76,7 @@ const App: React.FC = () => {
       case 'crop': return <CropTool />;
       case 'convert': return <ConvertTool />;
       case 'remove-bg': return <RemoveBgTool />;
+      case 'rotate': return <RotateTool />;
       default: return (
         <main className="flex-grow container mx-auto px-4 py-12 md:py-20">
           <div className="text-center max-w-4xl mx-auto mb-16">
