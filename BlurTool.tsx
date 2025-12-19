@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ToolPageLayout from './ToolPageLayout';
-import { MousePointer2, Settings2, Check, X, ShieldAlert, Eraser, PenTool, Square, Info, History, Zap, Circle, Wind } from 'lucide-react';
+import { MousePointer2, Settings2, Check, X, ShieldAlert, Eraser, PenTool, Square, Info, History, Zap, Circle, Wind, Download } from 'lucide-react';
 
 type BlurType = 'mosaic' | 'blur' | 'pixelate' | 'motion-blur';
 
@@ -15,9 +15,10 @@ interface BlurAction {
 
 const BlurEditor: React.FC<{
   image: string,
+  fileName: string,
   onSave: (result: string) => void,
   onClose: () => void
-}> = ({ image, onSave, onClose }) => {
+}> = ({ image, fileName, onSave, onClose }) => {
   const [blurType, setBlurType] = useState<BlurType>('mosaic');
   const [brushSize, setBrushSize] = useState(50);
   const [strength, setStrength] = useState(25);
@@ -28,6 +29,11 @@ const BlurEditor: React.FC<{
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
+
+  // Added handleUndo to fix the error on line 199
+  const handleUndo = () => {
+    setActions(prev => prev.slice(0, -1));
+  };
 
   useEffect(() => {
     const canvas = mainCanvasRef.current;
@@ -117,27 +123,38 @@ const BlurEditor: React.FC<{
       const s = Math.max(2, action.strength);
 
       if (action.type === 'mosaic') {
-        // 高级马赛克逻辑：像素精确对齐
+        // 方形马赛克逻辑：强制禁用平滑，产生清晰像素块
         eCtx.imageSmoothingEnabled = false;
-        eCtx.drawImage(mainCanvas, 0, 0, mainCanvas.width / s, mainCanvas.height / s);
-        eCtx.drawImage(effectCanvas, 0, 0, mainCanvas.width / s, mainCanvas.height / s, 0, 0, mainCanvas.width, mainCanvas.height);
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = mainCanvas.width / s;
+        tempCanvas.height = mainCanvas.height / s;
+        const tCtx = tempCanvas.getContext('2d')!;
+        tCtx.imageSmoothingEnabled = false;
+        tCtx.drawImage(mainCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+        eCtx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, mainCanvas.width, mainCanvas.height);
       } else if (action.type === 'pixelate') {
-        // 圆点像素化：使用缓冲数据提升性能
-        const sourceData = mainCanvas.getContext('2d')!.getImageData(0, 0, mainCanvas.width, mainCanvas.height).data;
-        eCtx.fillStyle = '#f0f0f0';
+        // 圆点像素化：逐点采样并绘制几何图形
+        const sourceCtx = mainCanvas.getContext('2d')!;
+        const imgData = sourceCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height).data;
+        eCtx.fillStyle = '#fff'; // 纯白底色增强波点效果
         eCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
         for (let y = 0; y < mainCanvas.height; y += s) {
           for (let x = 0; x < mainCanvas.width; x += s) {
-            const i = (Math.floor(y) * mainCanvas.width + Math.floor(x)) * 4;
-            eCtx.fillStyle = `rgb(${sourceData[i]}, ${sourceData[i+1]}, ${sourceData[i+2]})`;
-            eCtx.beginPath();
-            eCtx.arc(x + s/2, y + s/2, s/2 * 0.85, 0, Math.PI * 2);
-            eCtx.fill();
+            const centerX = Math.floor(x + s/2);
+            const centerY = Math.floor(y + s/2);
+            if (centerX < mainCanvas.width && centerY < mainCanvas.height) {
+              const i = (centerY * mainCanvas.width + centerX) * 4;
+              eCtx.fillStyle = `rgb(${imgData[i]}, ${imgData[i+1]}, ${imgData[i+2]})`;
+              eCtx.beginPath();
+              // 画圆，带一点点间隙感更美观
+              eCtx.arc(x + s/2, y + s/2, (s/2) * 0.9, 0, Math.PI * 2);
+              eCtx.fill();
+            }
           }
         }
       } else if (action.type === 'motion-blur') {
         // 增强型运动模糊
-        const steps = 15;
+        const steps = 20;
         const rad = (action.angle || 0) * (Math.PI / 180);
         eCtx.globalAlpha = 1 / steps;
         for (let i = 0; i < steps; i++) {
@@ -145,29 +162,36 @@ const BlurEditor: React.FC<{
           eCtx.drawImage(mainCanvas, Math.cos(rad) * shift, Math.sin(rad) * shift);
         }
       } else {
+        // 高斯模糊
         eCtx.filter = `blur(${action.strength}px)`;
         eCtx.drawImage(mainCanvas, 0, 0);
       }
 
-      // 笔刷涂抹应用
-      const pattern = fCtx.createPattern(effectCanvas, 'no-repeat')!;
-      fCtx.save();
-      fCtx.beginPath();
-      fCtx.lineCap = 'round';
-      fCtx.lineJoin = 'round';
-      fCtx.lineWidth = action.size;
-      fCtx.moveTo(action.points[0].x, action.points[0].y);
-      action.points.forEach(p => fCtx.lineTo(p.x, p.y));
-      fCtx.strokeStyle = pattern;
-      fCtx.stroke();
-      fCtx.restore();
+      // 笔刷涂抹应用：将 effectCanvas 作为一个 Pattern 涂在路径上
+      if (action.points.length > 0) {
+        const pattern = fCtx.createPattern(effectCanvas, 'no-repeat')!;
+        fCtx.save();
+        fCtx.beginPath();
+        fCtx.lineCap = 'round';
+        fCtx.lineJoin = 'round';
+        fCtx.lineWidth = action.size;
+        fCtx.moveTo(action.points[0].x, action.points[0].y);
+        action.points.forEach(p => fCtx.lineTo(p.x, p.y));
+        fCtx.strokeStyle = pattern;
+        fCtx.stroke();
+        fCtx.restore();
+      }
     });
 
-    onSave(finalCanvas.toDataURL('image/png'));
-  };
-
-  const handleUndo = () => {
-    setActions(prev => prev.slice(0, -1));
+    const resultDataUrl = finalCanvas.toDataURL('image/png');
+    
+    // 立即触发下载
+    const link = document.createElement('a');
+    link.href = resultDataUrl;
+    link.download = `pink_secure_${fileName}`;
+    link.click();
+    
+    onSave(resultDataUrl);
   };
 
   return (
@@ -178,14 +202,18 @@ const BlurEditor: React.FC<{
             <button onClick={onClose} className="p-2 text-white/50 hover:text-white transition-colors"><X /></button>
             <h3 className="text-xl font-black text-white tracking-tight">隐私遮盖编辑器</h3>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex items-center space-x-3">
              <button onClick={handleUndo} disabled={actions.length === 0} className="px-4 py-2 bg-white/10 text-white rounded-xl font-bold flex items-center space-x-2 hover:bg-white/20 disabled:opacity-30">
               <History className="w-4 h-4" />
               <span>撤销上一步</span>
             </button>
-            <button onClick={applyEffects} className="px-8 py-2 bg-pink-500 text-white rounded-xl font-black shadow-lg shadow-pink-500/30 hover:bg-pink-600 transition-all flex items-center space-x-2">
+            <button onClick={applyEffects} className="px-8 py-2 bg-pink-500 text-white rounded-xl font-black shadow-lg shadow-pink-500/30 hover:bg-pink-600 transition-all flex items-center space-x-2 group relative">
               <Check className="w-4 h-4" />
-              <span>确认修改</span>
+              <span>确认修改并下载</span>
+              {/* 漂浮提示 */}
+              <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-800 text-white text-[10px] py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/10">
+                确认修改后进行，保存后才有效果。
+              </div>
             </button>
           </div>
         </div>
@@ -208,37 +236,34 @@ const BlurEditor: React.FC<{
       <div className="w-full md:w-80 bg-white border-l border-slate-100 p-8 flex flex-col overflow-y-auto">
         <div className="space-y-8">
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600">
+            <div className="w-12 h-12 bg-pink-100 rounded-2xl flex items-center justify-center text-pink-600">
               <ShieldAlert className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="font-black text-slate-800">遮盖工具箱</h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">多样化笔刷样式</p>
+              <h4 className="font-black text-slate-800">样式选择</h4>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">选择不同的遮盖算法</p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">遮盖样式</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'mosaic', label: '高清马赛克', icon: <Square className="w-5 h-5" /> },
-                { id: 'pixelate', label: '几何像素点', icon: <Circle className="w-5 h-5" /> },
-                { id: 'blur', label: '精密模糊', icon: <PenTool className="w-5 h-5" /> },
-                { id: 'motion-blur', label: '动感拖影', icon: <Wind className="w-5 h-5" /> },
-              ].map(opt => (
-                <button 
-                  key={opt.id}
-                  onClick={() => setBlurType(opt.id as BlurType)} 
-                  className={`flex flex-col items-center p-3 rounded-2xl border-2 transition-all ${blurType === opt.id ? 'border-pink-500 bg-pink-50 text-pink-600 shadow-md' : 'border-slate-50 text-slate-400 hover:border-pink-100'}`}
-                >
-                  <div className="mb-2">{opt.icon}</div>
-                  <span className="text-[10px] font-black">{opt.label}</span>
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'mosaic', label: '方形马赛克', icon: <Square className="w-5 h-5" /> },
+              { id: 'pixelate', label: '圆点波点化', icon: <Circle className="w-5 h-5" /> },
+              { id: 'blur', label: '高斯模糊', icon: <PenTool className="w-5 h-5" /> },
+              { id: 'motion-blur', label: '运动模糊', icon: <Wind className="w-5 h-5" /> },
+            ].map(opt => (
+              <button 
+                key={opt.id}
+                onClick={() => setBlurType(opt.id as BlurType)} 
+                className={`flex flex-col items-center p-3 rounded-2xl border-2 transition-all ${blurType === opt.id ? 'border-pink-500 bg-pink-50 text-pink-600 shadow-md' : 'border-slate-50 text-slate-400 hover:border-pink-100'}`}
+              >
+                <div className="mb-2">{opt.icon}</div>
+                <span className="text-[10px] font-black">{opt.label}</span>
+              </button>
+            ))}
           </div>
 
-          <div className="space-y-6 pt-6 border-t border-slate-50">
+          <div className="space-y-6 pt-6 border-t border-slate-100">
             <div>
               <div className="flex justify-between text-[11px] font-black text-slate-600 mb-4 uppercase">
                 <span>笔触大小</span>
@@ -249,7 +274,7 @@ const BlurEditor: React.FC<{
 
             <div>
               <div className="flex justify-between text-[11px] font-black text-slate-600 mb-4 uppercase">
-                <span>效果强度</span>
+                <span>马赛克尺寸</span>
                 <span className="bg-slate-100 px-2 py-0.5 rounded-full">{strength}</span>
               </div>
               <input type="range" min="4" max="100" value={strength} onChange={(e) => setStrength(parseInt(e.target.value))} className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-pink-500" />
@@ -258,7 +283,7 @@ const BlurEditor: React.FC<{
             {blurType === 'motion-blur' && (
               <div className="animate-in slide-in-from-top-2 duration-300">
                 <div className="flex justify-between text-[11px] font-black text-slate-600 mb-4 uppercase">
-                  <span>模糊方向</span>
+                  <span>拖影方向</span>
                   <span className="bg-slate-100 px-2 py-0.5 rounded-full">{angle}°</span>
                 </div>
                 <input type="range" min="0" max="360" value={angle} onChange={(e) => setAngle(parseInt(e.target.value))} className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-pink-500" />
@@ -266,12 +291,14 @@ const BlurEditor: React.FC<{
             )}
           </div>
 
-          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-[11px] text-slate-500 leading-relaxed font-medium">
-             <div className="flex items-center space-x-2 text-pink-500 mb-2">
+          <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100">
+             <div className="flex items-center space-x-2 text-emerald-600 mb-2">
                 <Zap className="w-3 h-3" />
-                <span className="font-black uppercase">处理提示</span>
+                <span className="text-[10px] font-black uppercase">操作提示</span>
              </div>
-             马赛克强度越高像素块越大。几何像素点适用于遮挡人像，既能隐藏身份又具有艺术感。所有操作均在本地 Canvas 离屏渲染，保证隐私安全。
+             <p className="text-[11px] text-emerald-700 leading-relaxed font-medium">
+               确认修改后进行，系统将自动合成图像并直接弹出下载对话框。
+             </p>
           </div>
         </div>
       </div>
@@ -307,7 +334,7 @@ const BlurTool: React.FC = () => {
       if (!img.result) continue;
       const link = document.createElement('a');
       link.href = img.result;
-      link.download = `pink_privacy_${img.file.name}`;
+      link.download = `pink_final_${img.file.name}`;
       link.click();
     }
     setIsProcessing(false);
@@ -319,37 +346,44 @@ const BlurTool: React.FC = () => {
     <>
       <ToolPageLayout
         title="隐私遮盖与马赛克"
-        description="专业级的本地图像脱敏工具。提供马赛克、圆点像素化等多种艺术化遮盖方案。"
+        description="专业的批量图像脱敏工具。提供方形马赛克、圆点波点等多种精美样式，纯本地处理更安全。"
         images={images}
         onAddFiles={addFiles}
         onRemoveFile={(id) => setImages(prev => prev.filter(i => i.id !== id))}
         onProcess={processImages}
         isProcessing={isProcessing}
-        actionText="导出已遮盖图片"
+        actionText="批量重新下载所有图片"
         imageAction={(img) => (
           <button 
             onClick={() => setEditingImageId(img.id)}
             className="bg-white/90 hover:bg-white text-pink-500 p-2 rounded-xl shadow-lg transition-all active:scale-95 flex items-center space-x-2"
           >
             <PenTool className="w-4 h-4" />
-            <span className="text-xs font-black">进入编辑器</span>
+            <span className="text-xs font-black">进入打码编辑器</span>
           </button>
         )}
       >
-        <div className="bg-pink-50 p-6 rounded-3xl border border-pink-100 space-y-3">
-          <div className="flex items-center space-x-3 text-pink-500">
+        <div className="bg-pink-50 p-6 rounded-3xl border border-pink-100 space-y-4">
+          <div className="flex items-center space-x-3 text-pink-600">
             <ShieldAlert className="w-6 h-6" />
-            <span className="text-sm font-black">100% 本地脱敏</span>
+            <span className="text-sm font-black italic">本地 Canvas 渲染引擎</span>
           </div>
           <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-            本工具不涉及任何服务端上传，您的原始图像和处理逻辑全部在本地浏览器内存中运行。
+            每个马赛克样式都经过像素级调校，为您提供兼具安全性与美观性的隐私保护方案。
           </p>
+          <div className="pt-2 border-t border-pink-100 flex items-center justify-between">
+            <span className="text-[10px] font-black text-pink-400 uppercase">隐私级别</span>
+            <div className="flex space-x-1">
+               {[1,2,3,4,5].map(i => <div key={i} className="w-2 h-2 rounded-full bg-pink-500"></div>)}
+            </div>
+          </div>
         </div>
       </ToolPageLayout>
 
       {editingImageId && editingImage && (
         <BlurEditor 
           image={editingImage.preview}
+          fileName={editingImage.file.name}
           onSave={handleSave}
           onClose={() => setEditingImageId(null)}
         />

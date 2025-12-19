@@ -13,14 +13,12 @@ const RemoveBgTool: React.FC = () => {
   };
 
   const processImages = async () => {
-    const apiKey = localStorage.getItem('GEMINI_API_KEY');
-    if (!apiKey) {
-      alert("请点击右上角设置图标手动输入您的 Gemini API Key");
-      return;
+    // Check for API key selection when using gemini-3-pro-image-preview
+    if ((window as any).aistudio && !(await (window as any).aistudio.hasSelectedApiKey())) {
+      await (window as any).aistudio.openSelectKey();
     }
 
     setIsProcessing(true);
-    const ai = new GoogleGenAI({ apiKey });
 
     for (const img of images) {
       if (img.status === 'done') continue;
@@ -33,6 +31,8 @@ const RemoveBgTool: React.FC = () => {
           reader.readAsDataURL(img.file);
         });
 
+        // Initialize GoogleGenAI right before API call
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
         const response = await ai.models.generateContent({
           model: 'gemini-3-pro-image-preview',
           contents: {
@@ -43,19 +43,30 @@ const RemoveBgTool: React.FC = () => {
           }
         });
 
-        const resultPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (resultPart?.inlineData) {
-          const res = `data:${resultPart.inlineData.mimeType};base64,${resultPart.inlineData.data}`;
-          setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'done', result: res } : i));
+        // Find the image part in the response
+        let resultUrl = '';
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+          if (part.inlineData) {
+            resultUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            break;
+          }
+        }
+
+        if (resultUrl) {
+          setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'done', result: resultUrl } : i));
           const link = document.createElement('a');
-          link.href = res;
+          link.href = resultUrl;
           link.download = `no-bg_${img.file.name.split('.')[0]}.png`;
           link.click();
         } else {
-          throw new Error("No image data returned");
+          throw new Error("No image data returned from AI");
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        // Handle race condition/stale keys by prompting re-selection if needed
+        if (err?.message?.includes('Requested entity was not found') && (window as any).aistudio) {
+          await (window as any).aistudio.openSelectKey();
+        }
         setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: 'AI处理失败: ' + (err as Error).message } : i));
       }
     }
@@ -76,7 +87,7 @@ const RemoveBgTool: React.FC = () => {
     >
       <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
         <p className="text-[11px] font-bold text-emerald-700 leading-relaxed">
-          AI 将自动识别图像中的主体并精准移除背景。请确保在设置中手动填写了有效的 API Key。
+          AI 将自动识别图像中的主体并精准移除背景。请确保已经按照系统提示配置了有效的 API Key。
         </p>
       </div>
     </ToolPageLayout>

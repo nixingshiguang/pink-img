@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
-  FileCode, Image as ImageIcon, ShieldAlert, Stamp, Smile, 
-  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2, Save, Eye, EyeOff, Github
+  FileCode, Image as ImageIcon, ShieldAlert, Stamp, 
+  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Key, Github
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
 import UpscaleTool from './UpscaleTool';
@@ -19,145 +19,7 @@ import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
 import BlurTool from './BlurTool';
 
-const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      const savedKey = localStorage.getItem('GEMINI_API_KEY') || '';
-      setApiKey(savedKey);
-      setIsSaved(!!savedKey);
-    }
-  }, [isOpen]);
-
-  const handleSave = () => {
-    localStorage.setItem('GEMINI_API_KEY', apiKey);
-    setIsSaved(!!apiKey);
-    const btn = document.getElementById('save-btn');
-    if (btn) {
-      btn.innerText = '已保存！';
-      setTimeout(() => {
-        if (document.getElementById('save-btn')) {
-          btn.innerText = '保存配置';
-        }
-      }, 2000);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="p-8 border-b border-pink-50 flex items-center justify-between bg-pink-50/30">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-pink-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-pink-200">
-              <Settings className="w-5 h-5" />
-            </div>
-            <h3 className="text-xl font-black text-slate-800">应用设置</h3>
-          </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-pink-500 transition-colors">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-        
-        <div className="p-8 space-y-6">
-          <div className="space-y-4">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center space-x-2">
-              <Key className="w-3 h-3 text-pink-500" />
-              <span>Google Gemini API 配置</span>
-            </label>
-            
-            <div className={`p-6 rounded-3xl border-2 transition-all ${isSaved ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${isSaved ? 'bg-emerald-500' : 'bg-pink-400'} ${isSaved ? '' : 'animate-pulse'}`}></div>
-                  <span className={`text-xs font-black uppercase ${isSaved ? 'text-emerald-600' : 'text-pink-600'}`}>
-                    {isSaved ? 'API Key 已设置' : '请输入 API Key'}
-                  </span>
-                </div>
-                {isSaved && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-              </div>
-
-              <div className="relative mb-4">
-                <input 
-                  type={showKey ? "text" : "password"}
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setIsSaved(false);
-                  }}
-                  placeholder="在此输入您的 Gemini API Key"
-                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-mono focus:ring-2 focus:ring-pink-500 outline-none transition-all pr-12"
-                />
-                <button 
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-pink-500 transition-colors"
-                >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-
-              <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-5">
-                API Key 仅保存在您的浏览器本地 (LocalStorage)，用于调用 AI 提升画质及去除背景功能。
-              </p>
-              
-              <button 
-                id="save-btn"
-                onClick={handleSave}
-                className="w-full py-3 bg-slate-800 text-white hover:bg-slate-700 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
-              >
-                <Save className="w-4 h-4" />
-                <span>保存配置</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-            <a 
-              href="https://aistudio.google.com/app/apikey" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
-            >
-              <span className="flex items-center space-x-1.5">
-                <Info className="w-3 h-3" />
-                <span>如何获取免费 API Key？(Google AI Studio)</span>
-              </span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-            <a 
-              href="https://github.com/zyb0408/PinkImg.git" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
-            >
-              <span className="flex items-center space-x-1.5">
-                <Github className="w-3 h-3" />
-                <span>项目开源地址 (GitHub)</span>
-              </span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        </div>
-
-        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-          <button 
-            onClick={onClose}
-            className="px-8 py-2.5 bg-pink-500 text-white rounded-xl text-sm font-black hover:bg-pink-600 transition-all active:scale-95 shadow-lg shadow-pink-200"
-          >
-            完成
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({ onBack, onOpenSettings }) => (
+const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
   <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-pink-100 px-4 py-3">
     <div className="max-w-7xl mx-auto flex items-center justify-between">
       <div className="flex items-center space-x-8">
@@ -180,11 +42,16 @@ const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({
           </button>
         )}
         <button 
-          onClick={onOpenSettings}
+          onClick={async () => {
+            // As per guidelines, open the official API key selection dialog
+            if ((window as any).aistudio) {
+              await (window as any).aistudio.openSelectKey();
+            }
+          }}
           className="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center border border-pink-200 text-pink-500 hover:bg-pink-200 transition-all shadow-sm group"
-          title="系统设置"
+          title="配置 API Key"
         >
-          <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
+          <Key className="w-5 h-5 group-hover:rotate-12 transition-transform duration-500" />
         </button>
       </div>
     </div>
@@ -194,7 +61,16 @@ const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({
 const App: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<ToolCategory>('全部');
   const [currentTool, setCurrentTool] = useState<string | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Mandatory check for API key on mount for models like gemini-3-pro-image-preview
+  useEffect(() => {
+    const checkKey = async () => {
+      if ((window as any).aistudio && !(await (window as any).aistudio.hasSelectedApiKey())) {
+        await (window as any).aistudio.openSelectKey();
+      }
+    };
+    checkKey();
+  }, []);
 
   const tools: Tool[] = [
     { id: 'compress', title: '压缩图像', description: '压缩JPG、PNG、SVG和GIF，同时节省空间。', icon: <Layers className="w-7 h-7 text-green-600" />, category: ['全部', '优化'], color: 'bg-green-50' },
@@ -203,7 +79,7 @@ const App: React.FC = () => {
     { id: 'upscale', title: 'AI 提升画质', description: '以 AI 高分辨率放大图像，保持视觉质量。', isNew: true, icon: <Sparkles className="w-7 h-7 text-lime-600" />, category: ['全部', '优化'], color: 'bg-lime-50' },
     { id: 'convert', title: '转换格式', description: '批量转换图片格式至 JPG, PNG 或 WEBP。', icon: <ArrowRightLeft className="w-7 h-7 text-yellow-600" />, category: ['全部', '转换'], color: 'bg-yellow-50' },
     { id: 'remove-bg', title: '去除背景', description: '利用 AI 快速删除图像的背景，并保持高质量。', isNew: true, icon: <ImageIcon className="w-7 h-7 text-emerald-600" />, category: ['全部', '编辑'], color: 'bg-emerald-50' },
-    { id: 'exif', title: 'EXIF 编辑器', description: '查看和编辑图片元数据，如拍摄设备、日期和位置。', isNew: true, icon: <Info className="w-7 h-7 text-fuchsia-600" />, category: ['全部', '安全', '编辑'], color: 'bg-fuchsia-50' },
+    { id: 'exif', title: 'EXIF 编辑器', description: '查看和编辑图片元数据，如拍摄设备、日期 and 位置。', isNew: true, icon: <Info className="w-7 h-7 text-fuchsia-600" />, category: ['全部', '安全', '编辑'], color: 'bg-fuchsia-50' },
     { id: 'rotate', title: '旋转图片', description: '同时旋转多个 JPG, PNG 或 GIF 图片。', icon: <RotateCcw className="w-7 h-7 text-cyan-600" />, category: ['全部', '编辑'], color: 'bg-cyan-50' },
     { id: 'watermark', title: '添加水印', description: '快速给你的图片加上图像或文本水印。', icon: <Stamp className="w-7 h-7 text-indigo-600" />, category: ['全部', '编辑', '安全'], color: 'bg-indigo-50' },
     { id: 'filter', title: '照片滤镜', description: '利用预设滤镜、亮度或对比度调节让图片更生动。', icon: <Palette className="w-7 h-7 text-purple-600" />, category: ['全部', '编辑'], color: 'bg-purple-50' },
@@ -214,7 +90,7 @@ const App: React.FC = () => {
   const filteredTools = useMemo(() => {
     if (activeCategory === '全部') return tools;
     return tools.filter(t => t.category.includes(activeCategory));
-  }, [activeCategory]);
+  }, [activeCategory, tools]);
 
   const renderContent = () => {
     switch (currentTool) {
@@ -268,7 +144,6 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-pink-50/50 flex flex-col font-sans">
       <Navbar 
         onBack={currentTool ? () => setCurrentTool(null) : undefined} 
-        onOpenSettings={() => setIsSettingsOpen(true)}
       />
       {renderContent()}
       <footer className="bg-white border-t border-pink-100 py-12 mt-auto">
@@ -288,7 +163,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </footer>
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 };
