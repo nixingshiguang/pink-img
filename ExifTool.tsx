@@ -5,7 +5,7 @@ import {
   Settings, User, Camera, Calendar, MapPin, 
   ShieldOff, Check, AlertCircle, Info, ArrowLeft,
   Edit3, Globe, Loader2, Search, ChevronDown, ChevronUp,
-  FileText
+  FileText, Activity, Zap, Maximize
 } from 'lucide-react';
 
 interface ExifData {
@@ -17,6 +17,11 @@ interface ExifData {
   copyright?: string;
   latitude?: string;
   longitude?: string;
+  altitude?: string;
+  iso?: string;
+  exposureTime?: string;
+  aperture?: string;
+  focalLength?: string;
 }
 
 interface ImageItem {
@@ -25,10 +30,27 @@ interface ImageItem {
   preview: string;
   status: 'idle' | 'processing' | 'done' | 'error';
   exif: ExifData;
-  originalExif?: ExifData; // Store the immutable original data
+  originalExif?: ExifData;
 }
 
-// 轻量级 JPEG EXIF 解析器
+// 辅助函数：解析 Rational (有理数)
+const getRational = (view: DataView, offset: number, littleEndian: boolean): number => {
+  const num = view.getUint32(offset, littleEndian);
+  const den = view.getUint32(offset + 4, littleEndian);
+  return den === 0 ? 0 : num / den;
+};
+
+// 辅助函数：解析 GPS 坐标
+const parseGPSCoordinate = (view: DataView, offset: number, ref: string, littleEndian: boolean): string => {
+  const degrees = getRational(view, offset, littleEndian);
+  const minutes = getRational(view, offset + 8, littleEndian);
+  const seconds = getRational(view, offset + 16, littleEndian);
+  let coordinate = degrees + minutes / 60 + seconds / 3600;
+  if (ref === "S" || ref === "W") coordinate = -coordinate;
+  return coordinate.toFixed(6);
+};
+
+// 增强型 JPEG EXIF 解析器
 const readExifFromBlob = async (file: File): Promise<ExifData> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -48,37 +70,73 @@ const readExifFromBlob = async (file: File): Promise<ExifData> => {
             const littleEndian = view.getUint16(tiffOffset) === 0x4949;
             const ifdOffset = view.getUint32(tiffOffset + 4, littleEndian);
             
+            let gpsInfoOffset = -1;
+
+            const readString = (off: number, len: number) => {
+              let str = "";
+              for (let j = 0; j < len; j++) {
+                const char = view.getUint8(off + j);
+                if (char === 0) break;
+                str += String.fromCharCode(char);
+              }
+              return str.trim();
+            };
+
             const parseIFD = (start: number) => {
               const entries = view.getUint16(tiffOffset + start, littleEndian);
               for (let i = 0; i < entries; i++) {
                 const entryOffset = tiffOffset + start + 2 + (i * 12);
                 const tag = view.getUint16(entryOffset, littleEndian);
-                const type = view.getUint16(entryOffset + 2, littleEndian);
-                const count = view.getUint32(entryOffset + 4, littleEndian);
                 const valOffset = view.getUint32(entryOffset + 8, littleEndian) + tiffOffset;
+                const count = view.getUint32(entryOffset + 4, littleEndian);
 
-                const readString = (off: number, len: number) => {
-                  let str = "";
-                  for (let j = 0; j < len; j++) {
-                    const char = view.getUint8(off + j);
-                    if (char === 0) break;
-                    str += String.fromCharCode(char);
-                  }
-                  return str.trim();
-                };
-
-                // 常用标签解析
+                // 常用标签
                 if (tag === 0x010F) result.make = readString(valOffset, count);
                 if (tag === 0x0110) result.model = readString(valOffset, count);
-                if (tag === 0x0132) {
-                  const rawDate = readString(valOffset, count); // YYYY:MM:DD HH:MM:SS
-                  result.dateTime = rawDate.split(' ')[0].replace(/:/g, '-');
-                }
+                if (tag === 0x0132) result.dateTime = readString(valOffset, count).replace(/:/g, '-').replace(' ', 'T');
                 if (tag === 0x013B) result.artist = readString(valOffset, count);
                 if (tag === 0x8298) result.copyright = readString(valOffset, count);
+                
+                // 曝光参数
+                if (tag === 0x8827) result.iso = view.getUint16(entryOffset + 8, littleEndian).toString();
+                if (tag === 0x829A) {
+                  const exp = getRational(view, valOffset, littleEndian);
+                  result.exposureTime = exp < 1 ? `1/${Math.round(1/exp)}s` : `${exp}s`;
+                }
+                if (tag === 0x829D) result.aperture = `f/${getRational(view, valOffset, littleEndian).toFixed(1)}`;
+                if (tag === 0x920A) result.focalLength = `${getRational(view, valOffset, littleEndian).toFixed(1)}mm`;
+
+                // GPS 指针
+                if (tag === 0x8825) gpsInfoOffset = view.getUint32(entryOffset + 8, littleEndian);
               }
             };
+
             parseIFD(ifdOffset);
+
+            // 解析 GPS 子数据
+            if (gpsInfoOffset !== -1) {
+              const gpsStart = tiffOffset + gpsInfoOffset;
+              const gpsEntries = view.getUint16(gpsStart, littleEndian);
+              let latRef = "N", lonRef = "E";
+              
+              // 预扫描 Ref 标签
+              for (let i = 0; i < gpsEntries; i++) {
+                const entryOffset = gpsStart + 2 + (i * 12);
+                const tag = view.getUint16(entryOffset, littleEndian);
+                if (tag === 1) latRef = String.fromCharCode(view.getUint8(entryOffset + 8));
+                if (tag === 3) lonRef = String.fromCharCode(view.getUint8(entryOffset + 8));
+              }
+
+              for (let i = 0; i < gpsEntries; i++) {
+                const entryOffset = gpsStart + 2 + (i * 12);
+                const tag = view.getUint16(entryOffset, littleEndian);
+                const valOffset = view.getUint32(entryOffset + 8, littleEndian) + tiffOffset;
+
+                if (tag === 2) result.latitude = parseGPSCoordinate(view, valOffset, latRef, littleEndian);
+                if (tag === 4) result.longitude = parseGPSCoordinate(view, valOffset, lonRef, littleEndian);
+                if (tag === 6) result.altitude = `${getRational(view, valOffset, littleEndian).toFixed(1)}m`;
+              }
+            }
           }
           break;
         }
@@ -87,7 +145,7 @@ const readExifFromBlob = async (file: File): Promise<ExifData> => {
       resolve(result);
     };
     reader.onerror = () => resolve({});
-    reader.readAsArrayBuffer(file.slice(0, 128 * 1024)); // 只读取前 128KB 即可
+    reader.readAsArrayBuffer(file.slice(0, 256 * 1024)); // 增加读取范围以覆盖 GPS
   });
 };
 
@@ -120,7 +178,7 @@ const ExifTool: React.FC = () => {
       setImages(prev => prev.map(img => img.id === item.id ? {
         ...img,
         originalExif: originalExifData,
-        exif: { ...img.exif, ...originalExifData } // Sync to editable fields initially
+        exif: { ...img.exif, ...originalExifData }
       } : img));
     }
   };
@@ -161,7 +219,7 @@ const ExifTool: React.FC = () => {
   return (
     <ToolPageLayout
       title="EXIF 元数据编辑器"
-      description="批量修改或清除图片属性。上传后我们将自动尝试读取图片的原始拍摄信息。"
+      description="深入查看并编辑图片的每一个拍摄细节，包括光圈、ISO、快门速度和精确的 GPS 坐标。"
       images={images}
       onAddFiles={addFiles}
       onRemoveFile={(id) => {
@@ -170,14 +228,14 @@ const ExifTool: React.FC = () => {
       }}
       onProcess={processImages}
       isProcessing={isProcessing}
-      actionText="保存所有修改"
+      actionText="导出并保存修改"
       imageAction={(img) => (
         <button 
           onClick={(e) => { e.stopPropagation(); setActiveImageId(img.id); }}
           className="bg-pink-500 text-white p-2 rounded-xl shadow-lg transition-all active:scale-95 flex items-center space-x-2"
         >
           <Search className="w-4 h-4" />
-          <span className="text-xs font-black">查看详情</span>
+          <span className="text-xs font-black">查看参数</span>
         </button>
       )}
     >
@@ -189,7 +247,7 @@ const ExifTool: React.FC = () => {
             className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${!activeImageId ? 'bg-white shadow text-pink-500' : 'text-slate-400'}`}
           >
             <Globe className="w-4 h-4" />
-            <span>全局设置</span>
+            <span>全局应用</span>
           </button>
           <div className="w-px h-4 bg-slate-200 mx-1"></div>
           <button 
@@ -213,7 +271,7 @@ const ExifTool: React.FC = () => {
                  </div>
                  <div className="min-w-0">
                    <h5 className="text-xs font-black text-slate-800 truncate mb-0.5">{activeImage.file.name}</h5>
-                   <p className="text-[10px] text-pink-500 font-bold uppercase tracking-tight">已成功提取原始元数据</p>
+                   <p className="text-[10px] text-pink-500 font-bold uppercase tracking-tight">参数已自动提取</p>
                  </div>
                </div>
                
@@ -225,7 +283,7 @@ const ExifTool: React.FC = () => {
                  >
                    <div className="flex items-center space-x-2">
                      <FileText className="w-3 h-3" />
-                     <span className="text-[10px] font-black uppercase tracking-widest">原始 EXIF 预览</span>
+                     <span className="text-[10px] font-black uppercase tracking-widest">原始文件参数</span>
                    </div>
                    {isRawExifOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                  </button>
@@ -234,11 +292,26 @@ const ExifTool: React.FC = () => {
                    <div className="mt-3 space-y-2 animate-in slide-in-from-top-1 duration-200">
                      {activeImage.originalExif && Object.keys(activeImage.originalExif).length > 0 ? (
                        <div className="grid grid-cols-1 gap-1.5 p-3 bg-slate-50 rounded-xl">
-                         {Object.entries(activeImage.originalExif).map(([key, val]) => (
-                           val && (
+                         {/* Displaying expanded technical tags */}
+                         {[
+                           { key: 'make', label: '制造商', icon: <Camera className="w-2 h-2"/> },
+                           { key: 'model', label: '型号', icon: <Activity className="w-2 h-2"/> },
+                           { key: 'iso', label: 'ISO', icon: <Zap className="w-2 h-2"/> },
+                           { key: 'aperture', label: '光圈', icon: <Maximize className="w-2 h-2"/> },
+                           { key: 'exposureTime', label: '快门', icon: <Activity className="w-2 h-2"/> },
+                           { key: 'focalLength', label: '焦距', icon: <Maximize className="w-2 h-2"/> },
+                           { key: 'latitude', label: '纬度', icon: <MapPin className="w-2 h-2"/> },
+                           { key: 'longitude', label: '经度', icon: <MapPin className="w-2 h-2"/> },
+                           { key: 'altitude', label: '海拔', icon: <MapPin className="w-2 h-2"/> },
+                           { key: 'dateTime', label: '日期', icon: <Calendar className="w-2 h-2"/> },
+                         ].map(({key, label, icon}) => (
+                           (activeImage.originalExif as any)[key] && (
                              <div key={key} className="flex justify-between text-[9px] border-b border-slate-100 pb-1 last:border-0 last:pb-0">
-                               <span className="text-slate-400 font-bold uppercase">{key}</span>
-                               <span className="text-slate-600 font-black text-right truncate pl-4">{val}</span>
+                               <span className="text-slate-400 font-bold uppercase flex items-center space-x-1">
+                                 {icon}
+                                 <span>{label}</span>
+                               </span>
+                               <span className="text-slate-600 font-black text-right truncate pl-4">{(activeImage.originalExif as any)[key]}</span>
                              </div>
                            )
                          ))}
@@ -261,17 +334,17 @@ const ExifTool: React.FC = () => {
             <div className="group">
               <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
                 <Camera className="w-3 h-3 text-pink-500" />
-                <span>拍摄设备信息</span>
+                <span>核心设备信息</span>
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <input 
-                  type="text" placeholder="制造商 (如 Apple)"
+                  type="text" placeholder="制造商"
                   value={currentExif.make || ''}
                   onChange={(e) => updateField('make', e.target.value)}
                   className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                 />
                 <input 
-                  type="text" placeholder="型号 (如 iPhone)"
+                  type="text" placeholder="设备型号"
                   value={currentExif.model || ''}
                   onChange={(e) => updateField('model', e.target.value)}
                   className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none transition-all"
@@ -285,8 +358,8 @@ const ExifTool: React.FC = () => {
                 <span>拍摄日期时间</span>
               </label>
               <input 
-                type="date"
-                value={currentExif.dateTime || ''}
+                type="datetime-local"
+                value={currentExif.dateTime ? currentExif.dateTime.substring(0, 16) : ''}
                 onChange={(e) => updateField('dateTime', e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
               />
@@ -295,42 +368,48 @@ const ExifTool: React.FC = () => {
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
                 <MapPin className="w-3 h-3 text-pink-500" />
-                <span>GPS 地理位置</span>
+                <span>精准地理位置 (GPS)</span>
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 mb-2">
                 <input 
-                  type="text" placeholder="纬度 (Lat)"
+                  type="text" placeholder="纬度 (如 39.90)"
                   value={currentExif.latitude || ''}
                   onChange={(e) => updateField('latitude', e.target.value)}
                   className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
                 />
                 <input 
-                  type="text" placeholder="经度 (Lng)"
+                  type="text" placeholder="经度 (如 116.40)"
                   value={currentExif.longitude || ''}
                   onChange={(e) => updateField('longitude', e.target.value)}
                   className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
                 />
               </div>
+              <input 
+                type="text" placeholder="海拔高度 (m)"
+                value={currentExif.altitude || ''}
+                onChange={(e) => updateField('altitude', e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+              />
             </div>
 
             <div className="pt-2">
                <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
-                <User className="w-3 h-3 text-pink-500" />
-                <span>作者与版权</span>
+                <Activity className="w-3 h-3 text-pink-500" />
+                <span>曝光参数预览 (只读显示)</span>
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input 
-                  type="text" placeholder="拍摄者"
-                  value={currentExif.artist || ''}
-                  onChange={(e) => updateField('artist', e.target.value)}
-                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                />
-                <input 
-                  type="text" placeholder="版权归属"
-                  value={currentExif.copyright || ''}
-                  onChange={(e) => updateField('copyright', e.target.value)}
-                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center">
+                  <span className="text-[8px] font-bold text-slate-400">ISO</span>
+                  <span className="text-[10px] font-black text-slate-700">{currentExif.iso || 'N/A'}</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center">
+                  <span className="text-[8px] font-bold text-slate-400">光圈</span>
+                  <span className="text-[10px] font-black text-slate-700">{currentExif.aperture || 'N/A'}</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center">
+                  <span className="text-[8px] font-bold text-slate-400">快门</span>
+                  <span className="text-[10px] font-black text-slate-700">{currentExif.exposureTime || 'N/A'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -341,13 +420,13 @@ const ExifTool: React.FC = () => {
           <ShieldOff className={`w-5 h-5 flex-shrink-0 mt-0.5 ${privacyMode ? 'text-red-500' : 'text-blue-500'}`} />
           <div>
             <div className="flex items-center justify-between">
-              <h6 className={`text-xs font-black uppercase ${privacyMode ? 'text-red-600' : 'text-blue-600'}`}>安全设置</h6>
+              <h6 className={`text-xs font-black uppercase ${privacyMode ? 'text-red-600' : 'text-blue-600'}`}>安全合规</h6>
               <button onClick={() => setPrivacyMode(!privacyMode)} className={`text-[10px] font-black px-2 py-0.5 rounded-full ${privacyMode ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
-                {privacyMode ? '已开启脱敏' : '一键清除元数据'}
+                {privacyMode ? '已开启隐私保护' : '清除所有定位'}
               </button>
             </div>
             <p className="text-[10px] text-slate-500 mt-1 font-medium leading-relaxed">
-              开启后，所有导出的图片将不包含任何设备、位置和拍摄者信息。
+              保护您的数字足迹：开启后将彻底从图片文件中移除 GPS 坐标和设备识别码。
             </p>
           </div>
         </div>
