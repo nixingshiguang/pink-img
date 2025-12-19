@@ -4,7 +4,8 @@ import ToolPageLayout from './ToolPageLayout';
 import { 
   Settings, User, Camera, Calendar, MapPin, 
   ShieldOff, Check, AlertCircle, Info, ArrowLeft,
-  Edit3, Globe, Loader2, Search
+  Edit3, Globe, Loader2, Search, ChevronDown, ChevronUp,
+  FileText
 } from 'lucide-react';
 
 interface ExifData {
@@ -24,6 +25,7 @@ interface ImageItem {
   preview: string;
   status: 'idle' | 'processing' | 'done' | 'error';
   exif: ExifData;
+  originalExif?: ExifData; // Store the immutable original data
 }
 
 // 轻量级 JPEG EXIF 解析器
@@ -92,6 +94,7 @@ const readExifFromBlob = async (file: File): Promise<ExifData> => {
 const ExifTool: React.FC = () => {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
+  const [isRawExifOpen, setIsRawExifOpen] = useState(false);
   const [globalExif, setGlobalExif] = useState<ExifData>({
     make: '',
     model: '',
@@ -102,7 +105,6 @@ const ExifTool: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const addFiles = async (files: File[]) => {
-    // 立即添加占位，显示正在解析
     const newItems: ImageItem[] = files.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
@@ -113,12 +115,12 @@ const ExifTool: React.FC = () => {
     
     setImages(prev => [...prev, ...newItems]);
 
-    // 异步解析每张图片的原始 EXIF
     for (const item of newItems) {
-      const originalExif = await readExifFromBlob(item.file);
+      const originalExifData = await readExifFromBlob(item.file);
       setImages(prev => prev.map(img => img.id === item.id ? {
         ...img,
-        exif: { ...img.exif, ...originalExif }
+        originalExif: originalExifData,
+        exif: { ...img.exif, ...originalExifData } // Sync to editable fields initially
       } : img));
     }
   };
@@ -200,20 +202,56 @@ const ExifTool: React.FC = () => {
         </div>
 
         {activeImage && (
-          <div className="bg-white p-4 rounded-3xl border-2 border-pink-100 shadow-lg shadow-pink-50 animate-in zoom-in-95 duration-300">
-             <div className="flex items-center space-x-4 mb-4">
-               <div className="relative">
-                 <img src={activeImage.preview} className="w-16 h-16 object-cover rounded-2xl shadow-md border-2 border-white" />
-                 <div className="absolute -bottom-1 -right-1 bg-pink-500 text-white p-1 rounded-lg border-2 border-white">
-                   <Edit3 className="w-3 h-3" />
+          <div className="space-y-4">
+            <div className="bg-white p-4 rounded-3xl border-2 border-pink-100 shadow-lg shadow-pink-50 animate-in zoom-in-95 duration-300">
+               <div className="flex items-center space-x-4 mb-4">
+                 <div className="relative">
+                   <img src={activeImage.preview} className="w-16 h-16 object-cover rounded-2xl shadow-md border-2 border-white" />
+                   <div className="absolute -bottom-1 -right-1 bg-pink-500 text-white p-1 rounded-lg border-2 border-white">
+                     <Edit3 className="w-3 h-3" />
+                   </div>
+                 </div>
+                 <div className="min-w-0">
+                   <h5 className="text-xs font-black text-slate-800 truncate mb-0.5">{activeImage.file.name}</h5>
+                   <p className="text-[10px] text-pink-500 font-bold uppercase tracking-tight">已成功提取原始元数据</p>
                  </div>
                </div>
-               <div className="min-w-0">
-                 <h5 className="text-xs font-black text-slate-800 truncate mb-0.5">{activeImage.file.name}</h5>
-                 <p className="text-[10px] text-pink-500 font-bold uppercase tracking-tight">已成功提取原始元数据</p>
+               
+               {/* Raw EXIF Preview Collapsible */}
+               <div className="border-t border-slate-50 pt-3 mt-1">
+                 <button 
+                  onClick={() => setIsRawExifOpen(!isRawExifOpen)}
+                  className="w-full flex items-center justify-between text-slate-400 hover:text-slate-600 transition-colors"
+                 >
+                   <div className="flex items-center space-x-2">
+                     <FileText className="w-3 h-3" />
+                     <span className="text-[10px] font-black uppercase tracking-widest">原始 EXIF 预览</span>
+                   </div>
+                   {isRawExifOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                 </button>
+                 
+                 {isRawExifOpen && (
+                   <div className="mt-3 space-y-2 animate-in slide-in-from-top-1 duration-200">
+                     {activeImage.originalExif && Object.keys(activeImage.originalExif).length > 0 ? (
+                       <div className="grid grid-cols-1 gap-1.5 p-3 bg-slate-50 rounded-xl">
+                         {Object.entries(activeImage.originalExif).map(([key, val]) => (
+                           val && (
+                             <div key={key} className="flex justify-between text-[9px] border-b border-slate-100 pb-1 last:border-0 last:pb-0">
+                               <span className="text-slate-400 font-bold uppercase">{key}</span>
+                               <span className="text-slate-600 font-black text-right truncate pl-4">{val}</span>
+                             </div>
+                           )
+                         ))}
+                       </div>
+                     ) : (
+                       <div className="text-[9px] text-slate-400 italic text-center py-2">
+                         此文件不包含可读取的 EXIF 信息
+                       </div>
+                     )}
+                   </div>
+                 )}
                </div>
-             </div>
-             <div className="h-px bg-slate-50 w-full mb-4"></div>
+            </div>
           </div>
         )}
 
