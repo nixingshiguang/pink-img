@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ToolPageLayout from './ToolPageLayout';
-import { MousePointer2, Settings2, Check } from 'lucide-react';
+import { MousePointer2, Settings2, Check, Crop as CropIcon } from 'lucide-react';
 
 interface CropArea {
   x: number;
@@ -10,16 +10,47 @@ interface CropArea {
   height: number;
 }
 
+interface ImageItem {
+  id: string;
+  file: File;
+  preview: string;
+  status: 'idle' | 'processing' | 'done' | 'error';
+  result?: string;
+  customCropArea?: CropArea;
+  customRatio?: string;
+  error?: string;
+}
+
 const InteractiveCropper: React.FC<{ 
   image: string, 
   onSave: (area: CropArea) => void, 
   onClose: () => void,
-  initialArea?: CropArea
-}> = ({ image, onSave, onClose, initialArea }) => {
+  initialArea?: CropArea,
+  fixedRatio?: string
+}> = ({ image, onSave, onClose, initialArea, fixedRatio }) => {
   const [area, setArea] = useState<CropArea>(initialArea || { x: 10, y: 10, width: 80, height: 80 });
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef<string | null>(null);
   const startPos = useRef({ x: 0, y: 0, area: { ...area } });
+
+  // Handle fixed ratio adjustments if needed
+  useEffect(() => {
+    if (fixedRatio && fixedRatio !== 'free') {
+      const [rw, rh] = fixedRatio.split(':').map(Number);
+      setArea(prev => {
+        const next = { ...prev };
+        // Simple logic to force ratio on initial load
+        if (next.width / next.height !== rw / rh) {
+           next.height = next.width * (rh / rw);
+           if (next.y + next.height > 100) {
+             next.height = 100 - next.y;
+             next.width = next.height * (rw / rh);
+           }
+        }
+        return next;
+      });
+    }
+  }, [fixedRatio]);
 
   const handlePointerDown = (e: React.PointerEvent, handle: string) => {
     e.preventDefault();
@@ -38,6 +69,7 @@ const InteractiveCropper: React.FC<{
     setArea(prev => {
       let next = { ...startPos.current.area };
       const h = isDragging.current;
+      const ratio = fixedRatio && fixedRatio !== 'free' ? fixedRatio.split(':').map(Number) : null;
 
       if (h === 'box') {
         next.x = Math.max(0, Math.min(100 - next.width, next.x + dx));
@@ -55,6 +87,24 @@ const InteractiveCropper: React.FC<{
           next.height += (next.y - newY);
           next.y = newY;
         }
+
+        // Apply Aspect Ratio Constraint if set
+        if (ratio) {
+          const targetRatio = ratio[0] / ratio[1];
+          if (h === 'e' || h === 'w' || h === 's' || h === 'n') {
+             // Handle simple side dragging with ratio is tricky, usually disabled or locked
+             // For now we'll allow corner ratio locking
+          } else {
+             // Corner dragging ratio lock
+             if (h.includes('e') || h.includes('w')) {
+               next.height = next.width / targetRatio;
+               if (next.y + next.height > 100) {
+                 next.height = 100 - next.y;
+                 next.width = next.height * targetRatio;
+               }
+             }
+          }
+        }
       }
       return next;
     });
@@ -69,14 +119,16 @@ const InteractiveCropper: React.FC<{
       <div className="max-w-4xl w-full bg-white rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-black text-slate-800">自由裁剪设置</h3>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">拖拽边缘或中心来定义区域</p>
+            <h3 className="text-xl font-black text-slate-800">设置裁剪区域</h3>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+              {fixedRatio && fixedRatio !== 'free' ? `比例锁定: ${fixedRatio}` : '自由拖拽边缘或中心来定义区域'}
+            </p>
           </div>
           <div className="flex space-x-2">
             <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors">取消</button>
             <button onClick={() => onSave(area)} className="px-8 py-2 bg-pink-500 text-white rounded-xl font-black shadow-lg shadow-pink-200 hover:bg-pink-600 transition-all flex items-center space-x-2">
               <Check className="w-4 h-4" />
-              <span>确认裁剪区域</span>
+              <span>确认裁剪</span>
             </button>
           </div>
         </div>
@@ -85,7 +137,7 @@ const InteractiveCropper: React.FC<{
           <div 
             ref={containerRef}
             className="relative shadow-2xl bg-white select-none touch-none"
-            style={{ maxWidth: '100%', maxHeight: '100%', aspectRatio: 'auto' }}
+            style={{ maxWidth: '100%', maxHeight: '100%' }}
           >
             <img src={image} alt="Crop preview" className="max-w-full max-h-[60vh] block pointer-events-none" />
             
@@ -138,14 +190,19 @@ const InteractiveCropper: React.FC<{
 };
 
 const CropTool: React.FC = () => {
-  const [images, setImages] = useState<any[]>([]);
-  const [ratio, setRatio] = useState<string>('1:1');
-  const [freeCropArea, setFreeCropArea] = useState<CropArea>({ x: 10, y: 10, width: 80, height: 80 });
-  const [isConfiguringFreeCrop, setIsConfiguringFreeCrop] = useState(false);
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [globalRatio, setGlobalRatio] = useState<string>('1:1');
+  const [globalCropArea, setGlobalCropArea] = useState<CropArea>({ x: 10, y: 10, width: 80, height: 80 });
+  const [croppingImageId, setCroppingImageId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const addFiles = (files: File[]) => {
-    const newImgs = files.map(file => ({ id: Math.random().toString(36).substr(2, 9), file, preview: URL.createObjectURL(file), status: 'idle' }));
+    const newImgs: ImageItem[] = files.map(file => ({ 
+      id: Math.random().toString(36).substr(2, 9), 
+      file, 
+      preview: URL.createObjectURL(file), 
+      status: 'idle' 
+    }));
     setImages(prev => [...prev, ...newImgs]);
   };
 
@@ -162,13 +219,17 @@ const CropTool: React.FC = () => {
           const canvas = document.createElement('canvas');
           let sx, sy, sw, sh;
 
-          if (ratio === 'free') {
-            sx = (freeCropArea.x / 100) * tempImg.width;
-            sy = (freeCropArea.y / 100) * tempImg.height;
-            sw = (freeCropArea.width / 100) * tempImg.width;
-            sh = (freeCropArea.height / 100) * tempImg.height;
+          // Use custom settings if available, else global
+          const activeRatio = img.customRatio || globalRatio;
+          const activeArea = img.customCropArea || globalCropArea;
+
+          if (activeRatio === 'free' || img.customCropArea) {
+            sx = (activeArea.x / 100) * tempImg.width;
+            sy = (activeArea.y / 100) * tempImg.height;
+            sw = (activeArea.width / 100) * tempImg.width;
+            sh = (activeArea.height / 100) * tempImg.height;
           } else {
-            const [rw, rh] = ratio.split(':').map(Number);
+            const [rw, rh] = activeRatio.split(':').map(Number);
             sw = tempImg.width;
             sh = tempImg.height;
             
@@ -199,64 +260,76 @@ const CropTool: React.FC = () => {
     setIsProcessing(false);
   };
 
+  const handleCustomCropSave = (area: CropArea) => {
+    if (croppingImageId) {
+      setImages(prev => prev.map(img => img.id === croppingImageId ? { ...img, customCropArea: area, customRatio: globalRatio } : img));
+      setCroppingImageId(null);
+    }
+  };
+
+  const croppingImage = images.find(img => img.id === croppingImageId);
+
   return (
     <>
       <ToolPageLayout
         title="裁剪图片"
-        description="批量对图片进行裁剪。支持固定比例或自由选择区域。"
+        description="批量对图片进行裁剪。支持固定比例或为每张图片设置单独区域。"
         images={images}
         onAddFiles={addFiles}
         onRemoveFile={(id) => setImages(prev => prev.filter(i => i.id !== id))}
         onProcess={processImages}
         isProcessing={isProcessing}
-        actionText="开始裁剪"
+        actionText="开始批量裁剪"
+        imageAction={(img) => (
+          <button 
+            onClick={() => setCroppingImageId(img.id)}
+            className="bg-white/90 hover:bg-white text-pink-500 p-2 rounded-xl shadow-lg transition-all active:scale-95 flex items-center space-x-2"
+          >
+            <CropIcon className="w-4 h-4" />
+            <span className="text-xs font-black">调整此图</span>
+          </button>
+        )}
       >
         <div className="space-y-4">
-          <label className="text-xs font-black text-slate-400 uppercase tracking-wider block">选择裁剪模式</label>
+          <label className="text-xs font-black text-slate-400 uppercase tracking-wider block">全局默认比例</label>
           <div className="grid grid-cols-2 gap-2">
             {['1:1', '4:3', '16:9', '3:4'].map(r => (
               <button 
                 key={r} 
-                onClick={() => setRatio(r)} 
-                className={`py-3 rounded-xl border-2 font-bold transition-all ${ratio === r ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-slate-50 text-slate-500 hover:bg-slate-50'}`}
+                onClick={() => setGlobalRatio(r)} 
+                className={`py-3 rounded-xl border-2 font-bold transition-all ${globalRatio === r ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-slate-50 text-slate-500 hover:bg-slate-50'}`}
               >
                 {r}
               </button>
             ))}
             <button 
-              onClick={() => setRatio('free')} 
+              onClick={() => setGlobalRatio('free')} 
               className={`col-span-2 py-3 rounded-xl border-2 font-bold transition-all flex items-center justify-center space-x-2 
-                ${ratio === 'free' ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-slate-50 text-slate-500 hover:bg-slate-50'}`}
+                ${globalRatio === 'free' ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-slate-50 text-slate-500 hover:bg-slate-50'}`}
             >
               <MousePointer2 className="w-4 h-4" />
-              <span>自由裁剪</span>
+              <span>自由比例</span>
             </button>
           </div>
 
-          {ratio === 'free' && images.length > 0 && (
-            <div className="mt-6 animate-in fade-in slide-in-from-top-2">
-              <button 
-                onClick={() => setIsConfiguringFreeCrop(true)}
-                className="w-full py-4 bg-slate-800 text-white rounded-2xl font-black flex items-center justify-center space-x-3 hover:bg-slate-700 transition-all shadow-xl"
-              >
-                <Settings2 className="w-5 h-5" />
-                <span>配置裁剪区域</span>
-              </button>
-              <p className="text-[10px] text-slate-400 text-center mt-3 font-medium">配置将应用于所有待处理图片</p>
-            </div>
-          )}
+          <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">如何操作</h5>
+            <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+              1. 选择全局比例作为默认。<br/>
+              2. 鼠标悬停在上方单张图片，点击<b>“调整此图”</b>为特定图片定义精确区域。<br/>
+              3. 点击右下角按钮一键应用并导出。
+            </p>
+          </div>
         </div>
       </ToolPageLayout>
 
-      {isConfiguringFreeCrop && images.length > 0 && (
+      {croppingImageId && croppingImage && (
         <InteractiveCropper 
-          image={images[0].preview} 
-          initialArea={freeCropArea}
-          onSave={(area) => {
-            setFreeCropArea(area);
-            setIsConfiguringFreeCrop(false);
-          }}
-          onClose={() => setIsConfiguringFreeCrop(false)}
+          image={croppingImage.preview} 
+          initialArea={croppingImage.customCropArea || globalCropArea}
+          fixedRatio={globalRatio}
+          onSave={handleCustomCropSave}
+          onClose={() => setCroppingImageId(null)}
         />
       )}
     </>

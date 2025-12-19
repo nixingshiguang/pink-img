@@ -14,10 +14,11 @@ interface ToolPageLayoutProps {
   actionText: string;
   optionsArea?: React.ReactNode;
   children?: React.ReactNode;
+  imageAction?: (img: any) => React.ReactNode;
 }
 
 const ToolPageLayout: React.FC<ToolPageLayoutProps> = ({
-  title, description, isAi, images, onAddFiles, onRemoveFile, onProcess, isProcessing, actionText, optionsArea, children
+  title, description, isAi, images, onAddFiles, onRemoveFile, onProcess, isProcessing, actionText, optionsArea, children, imageAction
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,13 @@ const ToolPageLayout: React.FC<ToolPageLayoutProps> = ({
                   <div key={img.id} className="group relative bg-white p-3 rounded-2xl border border-pink-100 shadow-sm overflow-hidden">
                     <div className="aspect-[4/3] rounded-xl overflow-hidden mb-3 relative bg-slate-50 border border-slate-100">
                       <img src={img.result || img.preview} className="w-full h-full object-contain" alt="" />
+                      
+                      {imageAction && !isProcessing && img.status !== 'done' && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          {imageAction(img)}
+                        </div>
+                      )}
+
                       {img.status === 'processing' && (
                         <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center backdrop-blur-sm text-white">
                           <Loader2 className="w-8 h-8 animate-spin mb-2" />
