@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
   FileCode, Image as ImageIcon, ShieldAlert, Stamp, Smile, 
-  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key
+  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
 import UpscaleTool from './UpscaleTool';
@@ -18,14 +18,12 @@ import FilterTool from './FilterTool';
 import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
 
-// Fix: Removed redundant window.aistudio declaration that was causing type conflicts with the platform-provided 'AIStudio' type.
-
 const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      // @ts-ignore - window.aistudio is provided by the platform
+      // @ts-ignore
       window.aistudio.hasSelectedApiKey().then(setHasKey);
     }
   }, [isOpen]);
@@ -33,9 +31,10 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   if (!isOpen) return null;
 
   const handleSelectKey = async () => {
-    // @ts-ignore - window.aistudio is provided by the platform
+    // @ts-ignore
     await window.aistudio.openSelectKey();
-    // @ts-ignore - window.aistudio is provided by the platform
+    // 选择完成后刷新状态
+    // @ts-ignore
     setHasKey(await window.aistudio.hasSelectedApiKey());
   };
 
@@ -62,22 +61,25 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               <span>Google Gemini API 配置</span>
             </label>
             
-            <div className={`p-5 rounded-3xl border-2 transition-all ${hasKey ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-xs font-black uppercase ${hasKey ? 'text-emerald-600' : 'text-pink-600'}`}>
-                  {hasKey ? 'API Key 已就绪' : '未检测到 API Key'}
-                </span>
-                {hasKey && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>}
+            <div className={`p-6 rounded-3xl border-2 transition-all ${hasKey ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${hasKey ? 'bg-emerald-500' : 'bg-pink-400'} animate-pulse`}></div>
+                  <span className={`text-xs font-black uppercase ${hasKey ? 'text-emerald-600' : 'text-pink-600'}`}>
+                    {hasKey ? 'API Key 已就绪' : '等待配置 API Key'}
+                  </span>
+                </div>
+                {hasKey && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-4">
-                为了使用 AI 提升画质和背景移除等高级功能，您需要配置自己的 Google Gemini API Key。
+              <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-5">
+                此应用为单机工具，您的 API Key 仅在浏览器本地使用，用于调用 AI 提升画质及去除背景功能。
               </p>
               <button 
                 onClick={handleSelectKey}
-                className="w-full py-3 bg-white border border-slate-200 hover:border-pink-500 hover:text-pink-500 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm"
+                className="w-full py-3 bg-white border border-slate-200 hover:border-pink-500 hover:text-pink-500 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
               >
                 <Settings className="w-4 h-4" />
-                <span>{hasKey ? '更改 API Key' : '配置 API Key'}</span>
+                <span>{hasKey ? '更换/更新 API Key' : '立即输入 API Key'}</span>
               </button>
             </div>
           </div>
@@ -91,7 +93,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             >
               <span className="flex items-center space-x-1.5">
                 <Info className="w-3 h-3" />
-                <span>了解如何获取 API Key (官方文档)</span>
+                <span>如何获取免费/付费 API Key？</span>
               </span>
               <ExternalLink className="w-3 h-3" />
             </a>
@@ -103,7 +105,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             onClick={onClose}
             className="px-8 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-black hover:bg-slate-700 transition-all active:scale-95 shadow-lg shadow-slate-200"
           >
-            完成设置
+            保存并返回
           </button>
         </div>
       </div>
@@ -130,15 +132,15 @@ const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({
             className="flex items-center space-x-2 text-slate-600 hover:text-pink-500 font-bold transition-all px-4 py-2 rounded-xl hover:bg-pink-50"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span>返回主页</span>
+            <span>返回工具列表</span>
           </button>
         )}
         <button 
           onClick={onOpenSettings}
           className="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center border border-pink-200 text-pink-500 hover:bg-pink-200 transition-all shadow-sm group"
-          title="设置"
+          title="系统设置"
         >
-          <Settings className="w-5 h-5 group-hover:rotate-45 transition-transform duration-500" />
+          <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
         </button>
       </div>
     </div>
@@ -230,7 +232,7 @@ const App: React.FC = () => {
             <Heart className="w-5 h-5 text-pink-500 fill-current" />
             <span className="text-lg font-black text-slate-800 tracking-tight">PINK<span className="text-pink-500">IMG</span></span>
           </div>
-          <div className="text-sm text-slate-400">© {new Date().getFullYear()} PinkImg. 为你的创意而生.</div>
+          <div className="text-sm text-slate-400">@ {new Date().getFullYear()} PinkImg. 为你的创意而生.</div>
         </div>
       </footer>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
