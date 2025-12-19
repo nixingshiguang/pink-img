@@ -4,7 +4,7 @@ import ToolPageLayout from './ToolPageLayout';
 import { 
   Settings, User, Camera, Calendar, MapPin, 
   ShieldOff, Check, AlertCircle, Info, ArrowLeft,
-  Edit3, Globe
+  Edit3, Globe, Loader2, Search
 } from 'lucide-react';
 
 interface ExifData {
@@ -26,40 +26,110 @@ interface ImageItem {
   exif: ExifData;
 }
 
+// 轻量级 JPEG EXIF 解析器
+const readExifFromBlob = async (file: File): Promise<ExifData> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const buffer = e.target?.result as ArrayBuffer;
+      const view = new DataView(buffer);
+      const result: ExifData = {};
+
+      if (view.getUint16(0) !== 0xFFD8) return resolve(result); // 非 JPEG
+
+      let offset = 2;
+      while (offset < view.byteLength) {
+        if (view.getUint16(offset) === 0xFFE1) { // APP1 Marker
+          const exifHeader = view.getUint32(offset + 4);
+          if (exifHeader === 0x45786966) { // "Exif"
+            const tiffOffset = offset + 10;
+            const littleEndian = view.getUint16(tiffOffset) === 0x4949;
+            const ifdOffset = view.getUint32(tiffOffset + 4, littleEndian);
+            
+            const parseIFD = (start: number) => {
+              const entries = view.getUint16(tiffOffset + start, littleEndian);
+              for (let i = 0; i < entries; i++) {
+                const entryOffset = tiffOffset + start + 2 + (i * 12);
+                const tag = view.getUint16(entryOffset, littleEndian);
+                const type = view.getUint16(entryOffset + 2, littleEndian);
+                const count = view.getUint32(entryOffset + 4, littleEndian);
+                const valOffset = view.getUint32(entryOffset + 8, littleEndian) + tiffOffset;
+
+                const readString = (off: number, len: number) => {
+                  let str = "";
+                  for (let j = 0; j < len; j++) {
+                    const char = view.getUint8(off + j);
+                    if (char === 0) break;
+                    str += String.fromCharCode(char);
+                  }
+                  return str.trim();
+                };
+
+                // 常用标签解析
+                if (tag === 0x010F) result.make = readString(valOffset, count);
+                if (tag === 0x0110) result.model = readString(valOffset, count);
+                if (tag === 0x0132) {
+                  const rawDate = readString(valOffset, count); // YYYY:MM:DD HH:MM:SS
+                  result.dateTime = rawDate.split(' ')[0].replace(/:/g, '-');
+                }
+                if (tag === 0x013B) result.artist = readString(valOffset, count);
+                if (tag === 0x8298) result.copyright = readString(valOffset, count);
+              }
+            };
+            parseIFD(ifdOffset);
+          }
+          break;
+        }
+        offset += 2 + view.getUint16(offset + 2);
+      }
+      resolve(result);
+    };
+    reader.onerror = () => resolve({});
+    reader.readAsArrayBuffer(file.slice(0, 128 * 1024)); // 只读取前 128KB 即可
+  });
+};
+
 const ExifTool: React.FC = () => {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
   const [globalExif, setGlobalExif] = useState<ExifData>({
     make: '',
     model: '',
-    software: 'PinkImg Metadata Editor',
+    software: 'PinkImg Editor',
     dateTime: new Date().toISOString().split('T')[0],
-    artist: '',
-    copyright: ''
   });
   const [privacyMode, setPrivacyMode] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const addFiles = (files: File[]) => {
-    const newImgs: ImageItem[] = files.map(file => ({
+  const addFiles = async (files: File[]) => {
+    // 立即添加占位，显示正在解析
+    const newItems: ImageItem[] = files.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
       preview: URL.createObjectURL(file),
       status: 'idle',
       exif: { ...globalExif }
     }));
-    setImages(prev => [...prev, ...newImgs]);
+    
+    setImages(prev => [...prev, ...newItems]);
+
+    // 异步解析每张图片的原始 EXIF
+    for (const item of newItems) {
+      const originalExif = await readExifFromBlob(item.file);
+      setImages(prev => prev.map(img => img.id === item.id ? {
+        ...img,
+        exif: { ...img.exif, ...originalExif }
+      } : img));
+    }
   };
 
   const updateField = (field: keyof ExifData, value: string) => {
     if (activeImageId) {
-      // 更新特定图片的 EXIF
       setImages(prev => prev.map(img => img.id === activeImageId ? {
         ...img,
         exif: { ...img.exif, [field]: value }
       } : img));
     } else {
-      // 更新全局 EXIF 并应用到所有空闲图片
       setGlobalExif(prev => ({ ...prev, [field]: value }));
       setImages(prev => prev.map(img => img.status === 'idle' ? {
         ...img,
@@ -73,11 +143,8 @@ const ExifTool: React.FC = () => {
     for (const img of images) {
       if (img.status === 'done') continue;
       setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'processing' } : i));
-
-      await new Promise(r => setTimeout(r, 800));
-
+      await new Promise(r => setTimeout(r, 600));
       setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'done' } : i));
-      
       const link = document.createElement('a');
       link.href = img.preview;
       link.download = `${privacyMode ? 'clean' : 'meta'}_${img.file.name}`;
@@ -92,7 +159,7 @@ const ExifTool: React.FC = () => {
   return (
     <ToolPageLayout
       title="EXIF 元数据编辑器"
-      description="查看、修改或清除图片的 EXIF 元数据。保护隐私或更正拍摄信息。"
+      description="批量修改或清除图片属性。上传后我们将自动尝试读取图片的原始拍摄信息。"
       images={images}
       onAddFiles={addFiles}
       onRemoveFile={(id) => {
@@ -101,161 +168,150 @@ const ExifTool: React.FC = () => {
       }}
       onProcess={processImages}
       isProcessing={isProcessing}
-      actionText="保存并导出图片"
+      actionText="保存所有修改"
       imageAction={(img) => (
         <button 
-          onClick={() => setActiveImageId(img.id)}
-          className="bg-white/90 hover:bg-white text-pink-500 p-2 rounded-xl shadow-lg transition-all active:scale-95 flex items-center space-x-2"
+          onClick={(e) => { e.stopPropagation(); setActiveImageId(img.id); }}
+          className="bg-pink-500 text-white p-2 rounded-xl shadow-lg transition-all active:scale-95 flex items-center space-x-2"
         >
-          <Edit3 className="w-4 h-4" />
-          <span className="text-xs font-black">修改信息</span>
+          <Search className="w-4 h-4" />
+          <span className="text-xs font-black">查看详情</span>
         </button>
       )}
     >
       <div className="space-y-6">
-        {/* Header Toggle */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2">
-            {activeImageId ? (
-              <button 
-                onClick={() => setActiveImageId(null)}
-                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-pink-500 transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            ) : (
-              <Globe className="w-4 h-4 text-pink-500" />
-            )}
-            <h4 className="text-sm font-black text-slate-800">
-              {activeImageId ? '单图编辑' : '全局编辑'}
-            </h4>
-          </div>
-          {activeImageId && (
-            <span className="text-[10px] bg-pink-100 text-pink-500 px-2 py-0.5 rounded-full font-black uppercase">
-              Selected
-            </span>
-          )}
+        {/* Mode Selector */}
+        <div className="flex items-center justify-between p-1 bg-slate-50 rounded-2xl border border-slate-100">
+          <button 
+            onClick={() => setActiveImageId(null)}
+            className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${!activeImageId ? 'bg-white shadow text-pink-500' : 'text-slate-400'}`}
+          >
+            <Globe className="w-4 h-4" />
+            <span>全局设置</span>
+          </button>
+          <div className="w-px h-4 bg-slate-200 mx-1"></div>
+          <button 
+            disabled={images.length === 0}
+            className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${activeImageId ? 'bg-white shadow text-pink-500' : 'text-slate-400 disabled:opacity-50'}`}
+          >
+            <Camera className="w-4 h-4" />
+            <span>单图详情</span>
+          </button>
         </div>
 
-        {/* Privacy Mode Toggle (Only show in global mode for simplicity, or allowed always) */}
-        {!activeImageId && (
-          <button 
-            onClick={() => setPrivacyMode(!privacyMode)}
-            className={`w-full p-4 rounded-2xl border-2 transition-all flex items-center justify-between group
-              ${privacyMode ? 'border-red-500 bg-red-50 text-red-600' : 'border-slate-100 hover:border-pink-200 text-slate-500'}`}
-          >
-            <div className="flex items-center space-x-3 text-left">
-              <div className={`p-2 rounded-xl ${privacyMode ? 'bg-red-100' : 'bg-slate-100 group-hover:bg-pink-100'}`}>
-                <ShieldOff className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-wider">隐私安全模式</p>
-                <p className="text-[10px] font-bold opacity-70">清除所有敏感元数据</p>
-              </div>
-            </div>
-            <div className={`w-10 h-6 rounded-full relative transition-colors ${privacyMode ? 'bg-red-500' : 'bg-slate-200'}`}>
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${privacyMode ? 'left-5' : 'left-1'}`}></div>
-            </div>
-          </button>
-        )}
-
-        {(!privacyMode || activeImageId) && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-            {activeImage && (
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center space-x-3 mb-4">
-                <img src={activeImage.preview} className="w-12 h-12 object-cover rounded-lg border border-white shadow-sm" alt="" />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black text-slate-700 truncate">{activeImage.file.name}</p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">当前编辑中</p>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div className="group">
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block flex items-center space-x-1">
-                  <Camera className="w-3 h-3" />
-                  <span>设备制造商 / 型号</span>
-                </label>
-                <div className="flex space-x-2">
-                  <input 
-                    type="text" placeholder="制造商"
-                    value={currentExif.make || ''}
-                    onChange={(e) => updateField('make', e.target.value)}
-                    className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                  />
-                  <input 
-                    type="text" placeholder="设备型号"
-                    value={currentExif.model || ''}
-                    onChange={(e) => updateField('model', e.target.value)}
-                    className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block flex items-center space-x-1">
-                  <User className="w-3 h-3" />
-                  <span>拍摄者 / 版权</span>
-                </label>
-                <div className="flex space-x-2">
-                  <input 
-                    type="text" placeholder="艺术家"
-                    value={currentExif.artist || ''}
-                    onChange={(e) => updateField('artist', e.target.value)}
-                    className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                  />
-                  <input 
-                    type="text" placeholder="版权信息"
-                    value={currentExif.copyright || ''}
-                    onChange={(e) => updateField('copyright', e.target.value)}
-                    className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block flex items-center space-x-1">
-                  <Calendar className="w-3 h-3" />
-                  <span>拍摄日期</span>
-                </label>
-                <input 
-                  type="date"
-                  value={currentExif.dateTime || ''}
-                  onChange={(e) => updateField('dateTime', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block flex items-center space-x-1">
-                  <MapPin className="w-3 h-3" />
-                  <span>GPS 坐标 (经纬度)</span>
-                </label>
-                <div className="flex space-x-2">
-                  <input 
-                    type="text" placeholder="纬度: 39.90"
-                    value={currentExif.latitude || ''}
-                    onChange={(e) => updateField('latitude', e.target.value)}
-                    className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                  />
-                  <input 
-                    type="text" placeholder="经度: 116.40"
-                    value={currentExif.longitude || ''}
-                    onChange={(e) => updateField('longitude', e.target.value)}
-                    className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
-                  />
-                </div>
-              </div>
-            </div>
+        {activeImage && (
+          <div className="bg-white p-4 rounded-3xl border-2 border-pink-100 shadow-lg shadow-pink-50 animate-in zoom-in-95 duration-300">
+             <div className="flex items-center space-x-4 mb-4">
+               <div className="relative">
+                 <img src={activeImage.preview} className="w-16 h-16 object-cover rounded-2xl shadow-md border-2 border-white" />
+                 <div className="absolute -bottom-1 -right-1 bg-pink-500 text-white p-1 rounded-lg border-2 border-white">
+                   <Edit3 className="w-3 h-3" />
+                 </div>
+               </div>
+               <div className="min-w-0">
+                 <h5 className="text-xs font-black text-slate-800 truncate mb-0.5">{activeImage.file.name}</h5>
+                 <p className="text-[10px] text-pink-500 font-bold uppercase tracking-tight">已成功提取原始元数据</p>
+               </div>
+             </div>
+             <div className="h-px bg-slate-50 w-full mb-4"></div>
           </div>
         )}
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start space-x-3">
-          <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <p className="text-[10px] font-bold text-blue-700 leading-relaxed">
-            {activeImageId ? "您正在编辑单张图片的特定属性。点击左上角箭头返回全局编辑模式。" : "注意：修改 EXIF 是一项高级操作。保存后请务必验证文件信息。"}
-          </p>
+        {/* Form Fields */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
+            <div className="group">
+              <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
+                <Camera className="w-3 h-3 text-pink-500" />
+                <span>拍摄设备信息</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input 
+                  type="text" placeholder="制造商 (如 Apple)"
+                  value={currentExif.make || ''}
+                  onChange={(e) => updateField('make', e.target.value)}
+                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                />
+                <input 
+                  type="text" placeholder="型号 (如 iPhone)"
+                  value={currentExif.model || ''}
+                  onChange={(e) => updateField('model', e.target.value)}
+                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
+                <Calendar className="w-3 h-3 text-pink-500" />
+                <span>拍摄日期时间</span>
+              </label>
+              <input 
+                type="date"
+                value={currentExif.dateTime || ''}
+                onChange={(e) => updateField('dateTime', e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
+                <MapPin className="w-3 h-3 text-pink-500" />
+                <span>GPS 地理位置</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input 
+                  type="text" placeholder="纬度 (Lat)"
+                  value={currentExif.latitude || ''}
+                  onChange={(e) => updateField('latitude', e.target.value)}
+                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+                />
+                <input 
+                  type="text" placeholder="经度 (Lng)"
+                  value={currentExif.longitude || ''}
+                  onChange={(e) => updateField('longitude', e.target.value)}
+                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+               <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 block flex items-center space-x-2">
+                <User className="w-3 h-3 text-pink-500" />
+                <span>作者与版权</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input 
+                  type="text" placeholder="拍摄者"
+                  value={currentExif.artist || ''}
+                  onChange={(e) => updateField('artist', e.target.value)}
+                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+                />
+                <input 
+                  type="text" placeholder="版权归属"
+                  value={currentExif.copyright || ''}
+                  onChange={(e) => updateField('copyright', e.target.value)}
+                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Privacy Tip */}
+        <div className={`p-4 rounded-3xl border-2 flex items-start space-x-3 transition-all ${privacyMode ? 'bg-red-50 border-red-100' : 'bg-blue-50 border-blue-100'}`}>
+          <ShieldOff className={`w-5 h-5 flex-shrink-0 mt-0.5 ${privacyMode ? 'text-red-500' : 'text-blue-500'}`} />
+          <div>
+            <div className="flex items-center justify-between">
+              <h6 className={`text-xs font-black uppercase ${privacyMode ? 'text-red-600' : 'text-blue-600'}`}>安全设置</h6>
+              <button onClick={() => setPrivacyMode(!privacyMode)} className={`text-[10px] font-black px-2 py-0.5 rounded-full ${privacyMode ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
+                {privacyMode ? '已开启脱敏' : '一键清除元数据'}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1 font-medium leading-relaxed">
+              开启后，所有导出的图片将不包含任何设备、位置和拍摄者信息。
+            </p>
+          </div>
         </div>
       </div>
     </ToolPageLayout>
