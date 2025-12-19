@@ -3,8 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
   FileCode, Image as ImageIcon, ShieldAlert, Stamp, Smile, 
-  Sparkles, Layers, ChevronDown, Heart, ArrowLeft, Trash2,
-  Palette
+  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
 import UpscaleTool from './UpscaleTool';
@@ -17,6 +16,7 @@ import RotateTool from './RotateTool';
 import WatermarkTool from './WatermarkTool';
 import FilterTool from './FilterTool';
 import HtmlToImgTool from './HtmlToImgTool';
+import ExifTool from './ExifTool';
 
 const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
   <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-pink-100 px-4 py-3">
@@ -53,18 +53,18 @@ const App: React.FC = () => {
   const [currentTool, setCurrentTool] = useState<string | null>(null);
 
   const tools: Tool[] = [
-    { id: 'compress', title: '压缩图像文件', description: '压缩JPG、PNG、SVG、以及GIF，同时节省空间。', icon: <Layers className="w-7 h-7 text-green-600" />, category: ['全部', '优化'], color: 'bg-green-50' },
-    { id: 'resize', title: '调整图像的大小', description: '按照百分比或像素来定义尺寸，调整图片规格。', icon: <Maximize className="w-7 h-7 text-blue-600" />, category: ['全部', '编辑'], color: 'bg-blue-50' },
+    { id: 'compress', title: '压缩图像', description: '压缩JPG、PNG、SVG和GIF，同时节省空间。', icon: <Layers className="w-7 h-7 text-green-600" />, category: ['全部', '优化'], color: 'bg-green-50' },
+    { id: 'resize', title: '调整大小', description: '按百分比或像素定义尺寸，调整图片规格。', icon: <Maximize className="w-7 h-7 text-blue-600" />, category: ['全部', '编辑'], color: 'bg-blue-50' },
     { id: 'crop', title: '裁剪图片', description: '通过设定像素或比例来裁剪图像文件。', icon: <CropIcon className="w-7 h-7 text-sky-600" />, category: ['全部', '编辑'], color: 'bg-sky-50' },
-    { id: 'upscale', title: '提升图片质量', description: '以 AI 高分辨率放大图像，保持视觉质量。', isNew: true, icon: <Sparkles className="w-7 h-7 text-lime-600" />, category: ['全部', '优化'], color: 'bg-lime-50' },
-    { id: 'convert', title: '转换至图片格式', description: '批量转换图片格式至 JPG, PNG 或 WEBP。', icon: <ArrowRightLeft className="w-7 h-7 text-yellow-600" />, category: ['全部', '转换'], color: 'bg-yellow-50' },
+    { id: 'upscale', title: 'AI 提升画质', description: '以 AI 高分辨率放大图像，保持视觉质量。', isNew: true, icon: <Sparkles className="w-7 h-7 text-lime-600" />, category: ['全部', '优化'], color: 'bg-lime-50' },
+    { id: 'convert', title: '转换格式', description: '批量转换图片格式至 JPG, PNG 或 WEBP。', icon: <ArrowRightLeft className="w-7 h-7 text-yellow-600" />, category: ['全部', '转换'], color: 'bg-yellow-50' },
     { id: 'remove-bg', title: '去除背景', description: '利用 AI 快速删除图像的背景，并保持高质量。', isNew: true, icon: <ImageIcon className="w-7 h-7 text-emerald-600" />, category: ['全部', '编辑'], color: 'bg-emerald-50' },
-    { id: 'rotate', title: '旋转一个图片', description: '同时旋转多个 JPG, PNG 或 GIF 图片。', icon: <RotateCcw className="w-7 h-7 text-cyan-600" />, category: ['全部', '编辑'], color: 'bg-cyan-50' },
-    { id: 'watermark', title: '给图片加水印', description: '快速给你的图片加上图像或文本水印。', icon: <Stamp className="w-7 h-7 text-indigo-600" />, category: ['全部', '编辑', '安全'], color: 'bg-indigo-50' },
+    { id: 'exif', title: 'EXIF 编辑器', description: '查看和编辑图片元数据，如拍摄设备、日期和位置。', isNew: true, icon: <Info className="w-7 h-7 text-fuchsia-600" />, category: ['全部', '安全', '编辑'], color: 'bg-fuchsia-50' },
+    { id: 'rotate', title: '旋转图片', description: '同时旋转多个 JPG, PNG 或 GIF 图片。', icon: <RotateCcw className="w-7 h-7 text-cyan-600" />, category: ['全部', '编辑'], color: 'bg-cyan-50' },
+    { id: 'watermark', title: '添加水印', description: '快速给你的图片加上图像或文本水印。', icon: <Stamp className="w-7 h-7 text-indigo-600" />, category: ['全部', '编辑', '安全'], color: 'bg-indigo-50' },
     { id: 'filter', title: '照片滤镜', description: '利用预设滤镜、亮度或对比度调节让图片更生动。', icon: <Palette className="w-7 h-7 text-purple-600" />, category: ['全部', '编辑'], color: 'bg-purple-50' },
-    { id: 'meme', title: '搞笑图片生成器', description: '在线制作搞笑创意图片，选择流行的模板。', icon: <Smile className="w-7 h-7 text-rose-600" />, category: ['全部', '创建'], color: 'bg-rose-50' },
-    { id: 'html-to-img', title: 'HTML转图片', description: '将网页转换为JPG或SVG，复制链接即可。', icon: <FileCode className="w-7 h-7 text-orange-600" />, category: ['全部', '创建'], color: 'bg-orange-50' },
-    { id: 'blur-face', title: '模糊面部', description: '简便地模糊照片中的人脸或隐私物体。', isNew: true, icon: <ShieldAlert className="w-7 h-7 text-slate-600" />, category: ['全部', '编辑', '安全'], color: 'bg-slate-50' }
+    { id: 'html-to-img', title: 'HTML转图片', description: '将网页代码转换为JPG或SVG图像。', icon: <FileCode className="w-7 h-7 text-orange-600" />, category: ['全部', '创建'], color: 'bg-orange-50' },
+    { id: 'blur-face', title: '模糊隐私', description: '批量模糊照片中的人脸或隐私敏感物体。', isNew: true, icon: <ShieldAlert className="w-7 h-7 text-slate-600" />, category: ['全部', '编辑', '安全'], color: 'bg-slate-50' }
   ];
 
   const filteredTools = useMemo(() => {
@@ -84,6 +84,7 @@ const App: React.FC = () => {
       case 'watermark': return <WatermarkTool />;
       case 'filter': return <FilterTool />;
       case 'html-to-img': return <HtmlToImgTool />;
+      case 'exif': return <ExifTool />;
       default: return (
         <main className="flex-grow container mx-auto px-4 py-12 md:py-20">
           <div className="text-center max-w-4xl mx-auto mb-16">
