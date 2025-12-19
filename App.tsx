@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
   FileCode, Image as ImageIcon, ShieldAlert, Stamp, Smile, 
-  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings
+  Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
 import UpscaleTool from './UpscaleTool';
@@ -18,7 +18,100 @@ import FilterTool from './FilterTool';
 import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
 
-const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
+// Fix: Removed redundant window.aistudio declaration that was causing type conflicts with the platform-provided 'AIStudio' type.
+
+const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const [hasKey, setHasKey] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      // @ts-ignore - window.aistudio is provided by the platform
+      window.aistudio.hasSelectedApiKey().then(setHasKey);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSelectKey = async () => {
+    // @ts-ignore - window.aistudio is provided by the platform
+    await window.aistudio.openSelectKey();
+    // @ts-ignore - window.aistudio is provided by the platform
+    setHasKey(await window.aistudio.hasSelectedApiKey());
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="p-8 border-b border-pink-50 flex items-center justify-between bg-pink-50/30">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-pink-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-pink-200">
+              <Settings className="w-5 h-5" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800">应用设置</h3>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-pink-500 transition-colors">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+        
+        <div className="p-8 space-y-6">
+          <div className="space-y-4">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center space-x-2">
+              <Key className="w-3 h-3 text-pink-500" />
+              <span>Google Gemini API 配置</span>
+            </label>
+            
+            <div className={`p-5 rounded-3xl border-2 transition-all ${hasKey ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className={`text-xs font-black uppercase ${hasKey ? 'text-emerald-600' : 'text-pink-600'}`}>
+                  {hasKey ? 'API Key 已就绪' : '未检测到 API Key'}
+                </span>
+                {hasKey && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>}
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-4">
+                为了使用 AI 提升画质和背景移除等高级功能，您需要配置自己的 Google Gemini API Key。
+              </p>
+              <button 
+                onClick={handleSelectKey}
+                className="w-full py-3 bg-white border border-slate-200 hover:border-pink-500 hover:text-pink-500 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm"
+              >
+                <Settings className="w-4 h-4" />
+                <span>{hasKey ? '更改 API Key' : '配置 API Key'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <a 
+              href="https://ai.google.dev/gemini-api/docs/billing" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
+            >
+              <span className="flex items-center space-x-1.5">
+                <Info className="w-3 h-3" />
+                <span>了解如何获取 API Key (官方文档)</span>
+              </span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </div>
+
+        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+          <button 
+            onClick={onClose}
+            className="px-8 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-black hover:bg-slate-700 transition-all active:scale-95 shadow-lg shadow-slate-200"
+          >
+            完成设置
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({ onBack, onOpenSettings }) => (
   <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-pink-100 px-4 py-3">
     <div className="max-w-7xl mx-auto flex items-center justify-between">
       <div className="flex items-center space-x-8">
@@ -40,9 +133,13 @@ const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
             <span>返回主页</span>
           </button>
         )}
-        <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center border border-pink-200">
-          <span className="text-pink-500 text-xs font-bold">G</span>
-        </div>
+        <button 
+          onClick={onOpenSettings}
+          className="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center border border-pink-200 text-pink-500 hover:bg-pink-200 transition-all shadow-sm group"
+          title="设置"
+        >
+          <Settings className="w-5 h-5 group-hover:rotate-45 transition-transform duration-500" />
+        </button>
       </div>
     </div>
   </nav>
@@ -51,6 +148,7 @@ const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
 const App: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<ToolCategory>('全部');
   const [currentTool, setCurrentTool] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const tools: Tool[] = [
     { id: 'compress', title: '压缩图像', description: '压缩JPG、PNG、SVG和GIF，同时节省空间。', icon: <Layers className="w-7 h-7 text-green-600" />, category: ['全部', '优化'], color: 'bg-green-50' },
@@ -121,7 +219,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-pink-50/50 flex flex-col font-sans">
-      <Navbar onBack={currentTool ? () => setCurrentTool(null) : undefined} />
+      <Navbar 
+        onBack={currentTool ? () => setCurrentTool(null) : undefined} 
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
       {renderContent()}
       <footer className="bg-white border-t border-pink-100 py-12 mt-auto">
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-8">
@@ -129,9 +230,10 @@ const App: React.FC = () => {
             <Heart className="w-5 h-5 text-pink-500 fill-current" />
             <span className="text-lg font-black text-slate-800 tracking-tight">PINK<span className="text-pink-500">IMG</span></span>
           </div>
-          <div className="text-sm text-slate-400">© 2024 PinkImg. 为你的创意而生.</div>
+          <div className="text-sm text-slate-400">© {new Date().getFullYear()} PinkImg. 为你的创意而生.</div>
         </div>
       </footer>
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 };

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import ToolPageLayout from './ToolPageLayout';
 import { GoogleGenAI } from "@google/genai";
-import { Eye } from 'lucide-react';
+import { Eye, Settings } from 'lucide-react';
 
 const UpscaleTool: React.FC = () => {
   const [images, setImages] = useState<any[]>([]);
@@ -15,7 +15,18 @@ const UpscaleTool: React.FC = () => {
   };
 
   const processImages = async () => {
+    // Fix: Using @ts-ignore for window.aistudio methods provided by the platform
+    // @ts-ignore
+    const hasKey = await window.aistudio.hasSelectedApiKey();
+    if (!hasKey) {
+      alert("请先点击右上角设置图标配置 Gemini API Key");
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+      return;
+    }
+
     setIsProcessing(true);
+    // Use fresh instance for injected API Key
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     for (const img of images) {
@@ -30,12 +41,17 @@ const UpscaleTool: React.FC = () => {
         });
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
+          model: 'gemini-3-pro-image-preview',
           contents: {
             parts: [
               { inlineData: { data: base64, mimeType: img.file.type } },
-              { text: `Enhance this image to ${scaleFactor} resolution. Return only high quality image.` }
+              { text: `Enhance and upscale this image by ${scaleFactor} while preserving textures and removing noise. Return high quality image data.` }
             ]
+          },
+          config: {
+            imageConfig: {
+              imageSize: "1K"
+            }
           }
         });
 
@@ -43,9 +59,15 @@ const UpscaleTool: React.FC = () => {
         if (resultPart?.inlineData) {
           const res = `data:${resultPart.inlineData.mimeType};base64,${resultPart.inlineData.data}`;
           setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'done', result: res } : i));
+        } else {
+          throw new Error("No image data returned");
         }
       } catch (err) {
         setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: 'AI处理失败' } : i));
+        if ((err as any).message?.includes("Requested entity was not found")) {
+           // @ts-ignore
+           await window.aistudio.openSelectKey();
+        }
       }
     }
     setIsProcessing(false);
@@ -54,7 +76,7 @@ const UpscaleTool: React.FC = () => {
   return (
     <ToolPageLayout
       title="提升图片质量"
-      description="批量利用 AI 放大并修复图片细节。"
+      description="批量利用 AI 放大并修复图片细节。此功能需要您在设置中配置自己的 API Key。"
       isAi={true}
       images={images}
       onAddFiles={addFiles}
