@@ -16,6 +16,7 @@ import RemoveBgTool from './RemoveBgTool';
 import RotateTool from './RotateTool';
 import WatermarkTool from './WatermarkTool';
 import FilterTool from './FilterTool';
+import HtmlToImgTool from './HtmlToImgTool';
 
 const Navbar: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
   <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-pink-100 px-4 py-3">
@@ -82,6 +83,7 @@ const App: React.FC = () => {
       case 'rotate': return <RotateTool />;
       case 'watermark': return <WatermarkTool />;
       case 'filter': return <FilterTool />;
+      case 'html-to-img': return <HtmlToImgTool />;
       default: return (
         <main className="flex-grow container mx-auto px-4 py-12 md:py-20">
           <div className="text-center max-w-4xl mx-auto mb-16">
