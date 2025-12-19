@@ -13,12 +13,16 @@ const RemoveBgTool: React.FC = () => {
   };
 
   const processImages = async () => {
-    // Check for API key selection when using gemini-3-pro-image-preview
-    if ((window as any).aistudio && !(await (window as any).aistudio.hasSelectedApiKey())) {
-      await (window as any).aistudio.openSelectKey();
-    }
-
     setIsProcessing(true);
+
+    const manualKey = localStorage.getItem('GEMINI_API_KEY');
+    const finalKey = manualKey || process.env.API_KEY;
+
+    if (!finalKey) {
+      alert("请先在设置中配置 Gemini API Key");
+      setIsProcessing(false);
+      return;
+    }
 
     for (const img of images) {
       if (img.status === 'done') continue;
@@ -31,8 +35,8 @@ const RemoveBgTool: React.FC = () => {
           reader.readAsDataURL(img.file);
         });
 
-        // Initialize GoogleGenAI right before API call
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+        // Initialize GoogleGenAI with either the manual key or environment key
+        const ai = new GoogleGenAI({ apiKey: finalKey as string });
         const response = await ai.models.generateContent({
           model: 'gemini-3-pro-image-preview',
           contents: {
@@ -63,10 +67,6 @@ const RemoveBgTool: React.FC = () => {
         }
       } catch (err: any) {
         console.error(err);
-        // Handle race condition/stale keys by prompting re-selection if needed
-        if (err?.message?.includes('Requested entity was not found') && (window as any).aistudio) {
-          await (window as any).aistudio.openSelectKey();
-        }
         setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: 'AI处理失败: ' + (err as Error).message } : i));
       }
     }
