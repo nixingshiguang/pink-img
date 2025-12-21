@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw, 
-  FileCode, Image as ImageIcon, ShieldAlert, Stamp, 
+import {
+  Maximize, Crop as CropIcon, ArrowRightLeft, Type, RotateCcw,
+  FileCode, Image as ImageIcon, ShieldAlert, Stamp,
   Sparkles, Layers, Heart, ArrowLeft, Palette, Info, Settings, X, ExternalLink, Key, CheckCircle2, Save, Eye, EyeOff, Github
 } from 'lucide-react';
 import { Tool, ToolCategory } from './types';
@@ -18,6 +18,7 @@ import FilterTool from './FilterTool';
 import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
 import BlurTool from './BlurTool';
+import CreateImageTool from './CreateImageTool';
 
 const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const [apiKey, setApiKey] = useState('');
@@ -63,14 +64,14 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             <X className="w-6 h-6" />
           </button>
         </div>
-        
+
         <div className="p-8 space-y-6">
           <div className="space-y-4">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center space-x-2">
               <Key className="w-3 h-3 text-pink-500" />
               <span>Google Gemini API 配置</span>
             </label>
-            
+
             <div className={`p-6 rounded-3xl border-2 transition-all ${isSaved ? 'bg-emerald-50 border-emerald-100' : 'bg-pink-50 border-pink-100'}`}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-2">
@@ -83,7 +84,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               </div>
 
               <div className="relative mb-4">
-                <input 
+                <input
                   type={showKey ? "text" : "password"}
                   value={apiKey}
                   onChange={(e) => {
@@ -93,7 +94,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                   placeholder="在此输入您的 Gemini API Key"
                   className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-mono focus:ring-2 focus:ring-pink-500 outline-none transition-all pr-12"
                 />
-                <button 
+                <button
                   onClick={() => setShowKey(!showKey)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-pink-500 transition-colors"
                 >
@@ -104,8 +105,8 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               <p className="text-[11px] text-slate-500 leading-relaxed font-medium mb-5">
                 API Key 仅保存在您的浏览器本地 (LocalStorage)，用于调用 AI 提升画质及去除背景功能。
               </p>
-              
-              <button 
+
+              <button
                 id="save-btn"
                 onClick={handleSave}
                 className="w-full py-3 bg-slate-800 text-white hover:bg-slate-700 rounded-2xl text-xs font-black transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
@@ -117,9 +118,9 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
           </div>
 
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-            <a 
-              href="https://aistudio.google.com/app/apikey" 
-              target="_blank" 
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
             >
@@ -129,9 +130,9 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               </span>
               <ExternalLink className="w-3 h-3" />
             </a>
-            <a 
-              href="https://github.com/zyb0408/PinkImg.git" 
-              target="_blank" 
+            <a
+              href="https://github.com/zyb0408/PinkImg.git"
+              target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between text-[10px] font-bold text-slate-400 hover:text-pink-500 transition-colors"
             >
@@ -145,7 +146,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
         </div>
 
         <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-          <button 
+          <button
             onClick={onClose}
             className="px-8 py-2.5 bg-pink-500 text-white rounded-xl text-sm font-black hover:bg-pink-600 transition-all active:scale-95 shadow-lg shadow-pink-200"
           >
@@ -168,10 +169,10 @@ const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({
           <span className="text-xl font-black text-slate-800 tracking-tight">PINK<span className="text-pink-500">IMG</span></span>
         </div>
       </div>
-      
+
       <div className="flex items-center space-x-4">
         {onBack && (
-          <button 
+          <button
             onClick={onBack}
             className="flex items-center space-x-2 text-slate-600 hover:text-pink-500 font-bold transition-all px-4 py-2 rounded-xl hover:bg-pink-50"
           >
@@ -179,7 +180,7 @@ const Navbar: React.FC<{ onBack?: () => void; onOpenSettings: () => void }> = ({
             <span>返回工具列表</span>
           </button>
         )}
-        <button 
+        <button
           onClick={onOpenSettings}
           className="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center border border-pink-200 text-pink-500 hover:bg-pink-200 transition-all shadow-sm group"
           title="系统设置"
@@ -197,6 +198,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const tools: Tool[] = [
+    { id: 'create-image', title: '创建图片', description: '随心所欲创建底图，支持自定义分辨率、增加文字、表情包和图案。', isNew: true, icon: <div className="text-pink-600"><Palette className="w-7 h-7" /></div>, category: ['全部', '创建'], color: 'bg-pink-50' },
     { id: 'compress', title: '压缩图像', description: '压缩JPG、PNG、SVG和GIF，同时节省空间。', icon: <Layers className="w-7 h-7 text-green-600" />, category: ['全部', '优化'], color: 'bg-green-50' },
     { id: 'resize', title: '调整大小', description: '按百分比或像素定义尺寸，调整图片规格。', icon: <Maximize className="w-7 h-7 text-blue-600" />, category: ['全部', '编辑'], color: 'bg-blue-50' },
     { id: 'crop', title: '裁剪图片', description: '通过设定像素或比例来裁剪图像文件。', icon: <CropIcon className="w-7 h-7 text-sky-600" />, category: ['全部', '编辑'], color: 'bg-sky-50' },
@@ -218,6 +220,7 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (currentTool) {
+      case 'create-image': return <CreateImageTool />;
       case 'upscale': return <UpscaleTool />;
       case 'compress': return <CompressTool />;
       case 'resize': return <ResizeTool />;
@@ -266,8 +269,8 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-pink-50/50 flex flex-col font-sans">
-      <Navbar 
-        onBack={currentTool ? () => setCurrentTool(null) : undefined} 
+      <Navbar
+        onBack={currentTool ? () => setCurrentTool(null) : undefined}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
       {renderContent()}
@@ -280,10 +283,10 @@ const App: React.FC = () => {
           <div className="flex flex-col md:items-end space-y-1">
             <div className="text-sm text-slate-500 font-bold">作者：抖音 沪上码仔AI</div>
             <div className="text-[11px] text-slate-400 flex items-center space-x-3">
-               <span>© {new Date().getFullYear()} PinkImg. 为你的创意而生.</span>
-               <a href="https://github.com/zyb0408/PinkImg.git" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-pink-500 transition-colors">
-                 <Github className="w-4 h-4" />
-               </a>
+              <span>© {new Date().getFullYear()} PinkImg. 为你的创意而生.</span>
+              <a href="https://github.com/zyb0408/PinkImg.git" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-pink-500 transition-colors">
+                <Github className="w-4 h-4" />
+              </a>
             </div>
           </div>
         </div>
