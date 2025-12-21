@@ -5,6 +5,7 @@ import {
     Trash2, Download, Settings2, Undo, Move, X, ArrowRightLeft
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
+import { Rnd } from 'react-rnd';
 
 interface Element {
     id: string;
@@ -237,29 +238,66 @@ const CreateImageTool: React.FC = () => {
                     onClick={() => setSelectedId(null)}
                 >
                     {elements.map(el => (
-                        <div
+                        <Rnd
                             key={el.id}
+                            size={{ width: el.type === 'text' ? 'auto' : el.scale * 100, height: el.type === 'text' ? 'auto' : el.scale * 100 }}
+                            position={{ x: el.x, y: el.y }}
+                            onDragStop={(e, d) => {
+                                updateElement(el.id, { x: d.x, y: d.y });
+                                setSelectedId(el.id);
+                            }}
+                            onResizeStop={(e, direction, ref, delta, position) => {
+                                // For text, we might want to just scale font size or keep auto width
+                                // but for stickers/shapes we want to scale
+                                const newScale = parseFloat(ref.style.width) / 100;
+                                updateElement(el.id, {
+                                    scale: el.type === 'text' ? el.scale : newScale,
+                                    x: position.x,
+                                    y: position.y
+                                });
+                            }}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedId(el.id);
                             }}
-                            className={`absolute cursor-move select-none group ${selectedId === el.id ? 'z-50' : 'z-10'}`}
-                            style={{
-                                left: el.x,
-                                top: el.y,
-                                transform: `translate(-50%, -50%) rotate(${el.rotation}deg) scale(${el.scale})`,
-                            }}
+                            dragHandleClassName="drag-handle"
+                            bounds="parent"
+                            enableResizing={selectedId === el.id}
+                            disableDragging={false}
+                            className={`group ${selectedId === el.id ? 'z-50' : 'z-10'}`}
                         >
-                            <div className={`relative px-4 py-2 ${selectedId === el.id ? 'border-2 border-blue-500 rounded-lg bg-blue-50/20' : 'border-2 border-transparent hover:border-blue-300/50 rounded-lg'}`}>
+                            <div className={`relative w-full h-full flex items-center justify-center drag-handle ${selectedId === el.id ? 'border-2 border-blue-500 rounded-lg bg-blue-50/10' : 'border-2 border-transparent hover:border-blue-300/50 rounded-lg'}`}>
                                 {selectedId === el.id && (
                                     <>
-                                        <div className="absolute -top-3 -right-3 w-6 h-6 bg-red-500 rounded-full text-white flex items-center justify-center cursor-pointer shadow-sm hover:bg-red-600"
-                                            onClick={(e) => {
+                                        {/* Delete Button */}
+                                        <div className="absolute -top-3 -right-3 w-6 h-6 bg-red-500 rounded-full text-white flex items-center justify-center cursor-pointer shadow-sm hover:bg-red-600 z-50 pointer-events-auto"
+                                            onMouseDown={(e) => {
                                                 e.stopPropagation();
                                                 removeElement(el.id);
-                                            }}>
+                                            }}
+                                            onTouchStart={(e) => {
+                                                e.stopPropagation();
+                                                removeElement(el.id);
+                                            }}
+                                        >
                                             <X className="w-3 h-3" />
                                         </div>
+
+                                        {/* Color Picker for Text */}
+                                        {el.type === 'text' && (
+                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white p-1.5 rounded-lg shadow-xl border border-slate-100 flex items-center space-x-2 pointer-events-auto z-50"
+                                                onMouseDown={e => e.stopPropagation()}
+                                            >
+                                                <div className="w-4 h-4 rounded-full border border-slate-200 overflow-hidden relative">
+                                                    <input
+                                                        type="color"
+                                                        value={el.color}
+                                                        onChange={(e) => updateElement(el.id, { color: e.target.value })}
+                                                        className="absolute -top-2 -left-2 w-8 h-8 cursor-pointer p-0 border-0"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </>
                                 )}
 
@@ -268,50 +306,29 @@ const CreateImageTool: React.FC = () => {
                                         contentEditable={selectedId === el.id}
                                         suppressContentEditableWarning
                                         onBlur={(e) => updateElement(el.id, { content: e.currentTarget.innerText })}
+                                        onMouseDown={(e) => {
+                                            // Allow clicking to focus but propagate for drag if not editing
+                                            if (selectedId === el.id) e.stopPropagation();
+                                        }}
                                         style={{
                                             color: el.color,
                                             fontSize: `${el.fontSize}px`,
                                             fontWeight: 'bold',
                                             fontFamily: 'sans-serif',
-                                            whiteSpace: 'nowrap'
+                                            whiteSpace: 'nowrap',
+                                            padding: '8px',
+                                            cursor: 'text'
                                         }}
                                     >
                                         {el.content}
                                     </div>
                                 ) : (
-                                    <div style={{ fontSize: '64px' }}>{el.content}</div>
+                                    <div style={{ fontSize: `${64 * el.scale}px` }} className="pointer-events-none select-none">
+                                        {el.content}
+                                    </div>
                                 )}
                             </div>
-
-                            {/* Simple Controls for Selected Item (Simulated for this MVP) */}
-                            {selectedId === el.id && (
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-slate-800 rounded-lg p-2 flex space-x-2 shadow-xl" onClick={e => e.stopPropagation()}>
-                                    <button onClick={() => updateElement(el.id, { scale: el.scale + 0.1 })} className="p-1 text-white hover:bg-slate-700 rounded"><Layout className="w-4 h-4" /></button>
-                                    <button onClick={() => updateElement(el.id, { scale: Math.max(0.1, el.scale - 0.1) })} className="p-1 text-white hover:bg-slate-700 rounded"><Layout className="w-3 h-3" /></button>
-                                    {el.type === 'text' && (
-                                        <input
-                                            type="color"
-                                            value={el.color}
-                                            onChange={(e) => updateElement(el.id, { color: e.target.value })}
-                                            className="w-6 h-6 rounded cursor-pointer overflow-hidden border-0 p-0"
-                                        />
-                                    )}
-
-                                    {/* Movement controls for better UX without drag-n-drop lib */}
-                                    <div className="grid grid-cols-3 gap-0.5 w-16">
-                                        <div></div>
-                                        <button onClick={() => updateElement(el.id, { y: el.y - 10 })} className="bg-slate-700 hover:bg-slate-600 h-4 flex items-center justify-center rounded-sm"><Move className="w-2 h-2 text-white rotate-180" /></button>
-                                        <div></div>
-                                        <button onClick={() => updateElement(el.id, { x: el.x - 10 })} className="bg-slate-700 hover:bg-slate-600 h-4 flex items-center justify-center rounded-sm"><Move className="w-2 h-2 text-white -rotate-90" /></button>
-                                        <div className="bg-slate-900 h-4 rounded-sm"></div>
-                                        <button onClick={() => updateElement(el.id, { x: el.x + 10 })} className="bg-slate-700 hover:bg-slate-600 h-4 flex items-center justify-center rounded-sm"><Move className="w-2 h-2 text-white rotate-90" /></button>
-                                        <div></div>
-                                        <button onClick={() => updateElement(el.id, { y: el.y + 10 })} className="bg-slate-700 hover:bg-slate-600 h-4 flex items-center justify-center rounded-sm"><Move className="w-2 h-2 text-white" /></button>
-                                        <div></div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        </Rnd>
                     ))}
                 </div>
             </div>
