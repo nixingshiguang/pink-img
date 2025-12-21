@@ -19,6 +19,7 @@ import HtmlToImgTool from './HtmlToImgTool';
 import ExifTool from './ExifTool';
 import BlurTool from './BlurTool';
 import CreateImageTool from './CreateImageTool';
+import { PWAInstall } from './PWAInstall';
 
 const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const [apiKey, setApiKey] = useState('');
@@ -292,6 +293,7 @@ const App: React.FC = () => {
         </div>
       </footer>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <PWAInstall />
     </div>
   );
 };
