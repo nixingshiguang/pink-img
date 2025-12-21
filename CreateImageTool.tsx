@@ -9,14 +9,17 @@ import { Rnd } from 'react-rnd';
 
 interface Element {
     id: string;
-    type: 'text' | 'sticker' | 'shape';
-    content: string;
+    type: 'text' | 'sticker' | 'shape' | 'image';
+    content: string; // Text content or Image URL
     x: number;
     y: number;
     rotation: number;
     scale: number;
     color?: string;
     fontSize?: number;
+    fontFamily?: string;
+    width?: number; // For images
+    height?: number; // For images
 }
 
 const CreateImageTool: React.FC = () => {
@@ -36,8 +39,70 @@ const CreateImageTool: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
     const canvasRef = useRef<HTMLDivElement>(null);
 
-    // Sticker/Emoji list
-    const stickers = ['😀', '😍', '🎉', '🔥', '💖', '👍', '🚀', '💡', '🌈', '⭐'];
+    // Expanded Sticker/Emoji list
+    const stickers = [
+        '😀', '😍', '🎉', '🔥', '💖', '👍', '🚀', '💡', '🌈', '⭐',
+        '😎', '🤔', '😴', '😭', '🤯', '🥳', '👻', '👽', '🤖', '💩',
+        '🐱', '🐶', '🦄', '🌵', '🍕', '🍔', '🍺', '⚽', '🏀', '🎮'
+    ];
+
+    const fontFamilies = [
+        { name: '默认', value: 'sans-serif' },
+        { name: '衬线', value: 'serif' },
+        { name: '等宽', value: 'monospace' },
+        { name: '手写', value: 'cursive' },
+        { name: '幻想', value: 'fantasy' }
+    ];
+
+    // Handle Paste Event
+    useEffect(() => {
+        const handlePaste = (e: ClipboardEvent) => {
+            if (view !== 'editor') return;
+
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    if (blob) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            if (event.target?.result) {
+                                addElement('image', event.target.result as string);
+                            }
+                        };
+                        reader.readAsDataURL(blob);
+                    }
+                } else if (items[i].type === 'text/plain') {
+                    items[i].getAsString((text) => {
+                        addElement('text', text);
+                    });
+                }
+            }
+        };
+
+        window.addEventListener('paste', handlePaste);
+        return () => window.removeEventListener('paste', handlePaste);
+    }, [view, elements, config]); // Re-bind if necessary or keep stable
+
+    const addElement = (type: 'text' | 'sticker' | 'shape' | 'image', content: string) => {
+        const newEl: Element = {
+            id: Date.now().toString(),
+            type,
+            content,
+            x: config.width / 2,
+            y: config.height / 2,
+            rotation: 0,
+            scale: 1, // Start at 100% scale
+            color: type === 'text' ? '#000000' : undefined,
+            fontSize: type === 'text' ? 40 : undefined,
+            fontFamily: 'sans-serif',
+            width: type === 'image' ? 300 : undefined, // Default image width
+        };
+        setElements(prev => [...prev, newEl]); // Use functional update
+        setSelectedId(newEl.id);
+    };
 
     const presets = [
         { label: 'Instagram Square', w: 1080, h: 1080 },
@@ -48,22 +113,6 @@ const CreateImageTool: React.FC = () => {
         { label: 'Standard 3:4', w: 1536, h: 2048 },
         { label: 'Tall 1:2', w: 1000, h: 2000 },
     ];
-
-    const addElement = (type: 'text' | 'sticker' | 'shape', content: string) => {
-        const newEl: Element = {
-            id: Date.now().toString(),
-            type,
-            content,
-            x: config.width / 2,
-            y: config.height / 2,
-            rotation: 0,
-            scale: 1,
-            color: type === 'text' ? '#000000' : undefined,
-            fontSize: type === 'text' ? 40 : undefined
-        };
-        setElements([...elements, newEl]);
-        setSelectedId(newEl.id);
-    };
 
     const updateElement = (id: string, updates: Partial<Element>) => {
         setElements(elements.map(el => el.id === id ? { ...el, ...updates } : el));
@@ -167,7 +216,15 @@ const CreateImageTool: React.FC = () => {
                                         onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
                                         className="w-10 h-10 rounded-lg cursor-pointer border-none p-0 bg-transparent overflow-hidden"
                                     />
-                                    <span className="font-mono text-sm font-bold text-slate-600 uppercase">{config.backgroundColor}</span>
+                                    <span className="font-mono text-sm font-bold text-slate-600 uppercase">
+                                        <input
+                                            type="text"
+                                            value={config.backgroundColor}
+                                            onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
+                                            className="w-24 bg-transparent border-b border-slate-300 focus:border-pink-500 outline-none px-1"
+                                            placeholder="#FFFFFF"
+                                        />
+                                    </span>
                                 </div>
                             </div>
                             <div className="flex-1">
@@ -186,7 +243,6 @@ const CreateImageTool: React.FC = () => {
         );
     }
 
-    // Editor View
     return (
         <div className="flex-grow flex flex-col h-screen max-h-[calc(100vh-80px)]">
             {/* Toolbar */}
@@ -203,12 +259,12 @@ const CreateImageTool: React.FC = () => {
                         <Type className="w-4 h-4" />
                         <span>添加文字</span>
                     </button>
-                    <div className="flex items-center space-x-2">
-                        {stickers.slice(0, 5).map(s => (
+                    <div className="flex items-center space-x-2 overflow-x-auto max-w-[200px] md:max-w-md no-scrollbar">
+                        {stickers.map(s => (
                             <button
                                 key={s}
                                 onClick={() => addElement('sticker', s)}
-                                className="text-2xl hover:scale-125 transition-transform"
+                                className="text-2xl hover:scale-125 transition-transform p-1"
                             >
                                 {s}
                             </button>
@@ -227,6 +283,9 @@ const CreateImageTool: React.FC = () => {
 
             {/* Canvas Area */}
             <div className="flex-grow bg-slate-100 overflow-auto flex items-center justify-center p-8 relative">
+                <div className="absolute top-4 left-4 z-0 text-slate-400 text-xs pointer-events-none">
+                    提示: 支持直接 Ctrl+V 粘贴图片或文字
+                </div>
                 <div
                     ref={canvasRef}
                     style={{
@@ -240,21 +299,24 @@ const CreateImageTool: React.FC = () => {
                     {elements.map(el => (
                         <Rnd
                             key={el.id}
-                            size={{ width: el.type === 'text' ? 'auto' : el.scale * 100, height: el.type === 'text' ? 'auto' : el.scale * 100 }}
+                            size={{
+                                width: el.type === 'text' || el.type === 'sticker' ? 'auto' : (el.width || 100) * el.scale,
+                                height: el.type === 'text' || el.type === 'sticker' ? 'auto' : 'auto'
+                            }}
                             position={{ x: el.x, y: el.y }}
                             onDragStop={(e, d) => {
                                 updateElement(el.id, { x: d.x, y: d.y });
                                 setSelectedId(el.id);
                             }}
                             onResizeStop={(e, direction, ref, delta, position) => {
-                                // For text, we might want to just scale font size or keep auto width
-                                // but for stickers/shapes we want to scale
-                                const newScale = parseFloat(ref.style.width) / 100;
-                                updateElement(el.id, {
-                                    scale: el.type === 'text' ? el.scale : newScale,
-                                    x: position.x,
-                                    y: position.y
-                                });
+                                if (el.type === 'image') {
+                                    const newWidth = parseFloat(ref.style.width);
+                                    updateElement(el.id, { width: newWidth, scale: 1, x: position.x, y: position.y });
+                                } else if (el.type !== 'text') {
+                                    // Scaling logic for shapes/stickers using scale factor if preferred
+                                    const newScale = parseFloat(ref.style.width) / 100;
+                                    updateElement(el.id, { scale: newScale, x: position.x, y: position.y });
+                                }
                             }}
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -262,8 +324,9 @@ const CreateImageTool: React.FC = () => {
                             }}
                             dragHandleClassName="drag-handle"
                             bounds="parent"
-                            enableResizing={selectedId === el.id}
+                            enableResizing={selectedId === el.id && el.type !== 'text'} // Disable resize handle for text, use font size
                             disableDragging={false}
+                            lockAspectRatio={el.type === 'image'}
                             className={`group ${selectedId === el.id ? 'z-50' : 'z-10'}`}
                         >
                             <div className={`relative w-full h-full flex items-center justify-center drag-handle ${selectedId === el.id ? 'border-2 border-blue-500 rounded-lg bg-blue-50/10' : 'border-2 border-transparent hover:border-blue-300/50 rounded-lg'}`}>
@@ -283,21 +346,42 @@ const CreateImageTool: React.FC = () => {
                                             <X className="w-3 h-3" />
                                         </div>
 
-                                        {/* Color Picker for Text */}
-                                        {el.type === 'text' && (
-                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white p-1.5 rounded-lg shadow-xl border border-slate-100 flex items-center space-x-2 pointer-events-auto z-50"
-                                                onMouseDown={e => e.stopPropagation()}
-                                            >
-                                                <div className="w-4 h-4 rounded-full border border-slate-200 overflow-hidden relative">
+                                        {/* Toolbar for Selected Item */}
+                                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white p-1.5 rounded-lg shadow-xl border border-slate-100 flex items-center space-x-2 pointer-events-auto z-50"
+                                            onMouseDown={e => e.stopPropagation()}
+                                        >
+                                            {/* Common: Layer controls could go here */}
+
+                                            {/* Text Specific Controls */}
+                                            {el.type === 'text' && (
+                                                <>
+                                                    <div className="w-6 h-6 rounded-full border border-slate-200 overflow-hidden relative" title="颜色">
+                                                        <input
+                                                            type="color"
+                                                            value={el.color}
+                                                            onChange={(e) => updateElement(el.id, { color: e.target.value })}
+                                                            className="absolute -top-2 -left-2 w-10 h-10 cursor-pointer p-0 border-0"
+                                                        />
+                                                    </div>
+                                                    <div className="h-4 w-px bg-slate-200"></div>
                                                     <input
-                                                        type="color"
-                                                        value={el.color}
-                                                        onChange={(e) => updateElement(el.id, { color: e.target.value })}
-                                                        className="absolute -top-2 -left-2 w-8 h-8 cursor-pointer p-0 border-0"
+                                                        type="number"
+                                                        value={el.fontSize}
+                                                        onChange={(e) => updateElement(el.id, { fontSize: Number(e.target.value) })}
+                                                        className="w-12 h-6 bg-slate-50 border border-slate-200 rounded text-xs text-center font-bold outline-none focus:border-pink-500"
+                                                        title="字号"
                                                     />
-                                                </div>
-                                            </div>
-                                        )}
+                                                    <select
+                                                        value={el.fontFamily}
+                                                        onChange={(e) => updateElement(el.id, { fontFamily: e.target.value })}
+                                                        className="h-6 bg-slate-50 border border-slate-200 rounded text-xs outline-none focus:border-pink-500"
+                                                        title="字体"
+                                                    >
+                                                        {fontFamilies.map(f => <option key={f.value} value={f.value}>{f.name}</option>)}
+                                                    </select>
+                                                </>
+                                            )}
+                                        </div>
                                     </>
                                 )}
 
@@ -307,21 +391,27 @@ const CreateImageTool: React.FC = () => {
                                         suppressContentEditableWarning
                                         onBlur={(e) => updateElement(el.id, { content: e.currentTarget.innerText })}
                                         onMouseDown={(e) => {
-                                            // Allow clicking to focus but propagate for drag if not editing
                                             if (selectedId === el.id) e.stopPropagation();
                                         }}
                                         style={{
                                             color: el.color,
                                             fontSize: `${el.fontSize}px`,
                                             fontWeight: 'bold',
-                                            fontFamily: 'sans-serif',
+                                            fontFamily: el.fontFamily,
                                             whiteSpace: 'nowrap',
                                             padding: '8px',
-                                            cursor: 'text'
+                                            cursor: 'text',
+                                            lineHeight: 1.2
                                         }}
                                     >
                                         {el.content}
                                     </div>
+                                ) : el.type === 'image' ? (
+                                    <img
+                                        src={el.content}
+                                        className="w-full h-full object-contain pointer-events-none"
+                                        alt="pasted"
+                                    />
                                 ) : (
                                     <div style={{ fontSize: `${64 * el.scale}px` }} className="pointer-events-none select-none">
                                         {el.content}
