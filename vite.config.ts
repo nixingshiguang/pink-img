@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
+  base: "/imgtool1/"
   const env = loadEnv(mode, '.', '');
   return {
     server: {
