@@ -6,8 +6,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  const BASE_PATH = "/imgtool1/";
   return {
-    base: "/imgtool1/",
+    base: BASE_PATH，
     server: {
       port: 3000,
       host: '0.0.0.0',
@@ -24,15 +25,17 @@ export default defineConfig(({ mode }) => {
           theme_color: '#ec4899',
           background_color: '#ffffff',
           display: 'standalone',
+          start_url: BASE_PATH,
+          scope: BASE_PATH,
           icons: [
             {
-              src: 'icon.svg',
-              sizes: '192x192',
+              src: `${BASE_PATH}/icon.svg`，
+              sizes: '192x192'，
               type: 'image/svg+xml'
             },
             {
-              src: 'icon.svg',
-              sizes: '512x512',
+              src: `${BASE_PATH}/icon.svg`，
+              sizes: '512x512'，
               type: 'image/svg+xml'
             }
           ]
@@ -45,7 +48,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, '.')，
       }
     }
   };
